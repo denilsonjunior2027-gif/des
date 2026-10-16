@@ -1,0 +1,176 @@
+﻿'use strict';
+const express = require('express');
+const http = require('http');
+const path = require('path');
+const fs = require('fs');
+const crypto = require('crypto');
+const { Server } = require('socket.io');
+
+const PORT = Number(process.env.PORT) || 3000;
+const HOST = process.env.HOST || '0.0.0.0';
+const ROOT = __dirname;
+const PLATFORM_DIR = path.join(ROOT, 'platform');
+const DATA_DIR = path.join(ROOT, 'data');
+const USERS_FILE = path.join(DATA_DIR, 'users.json');
+const GAMES_FILE = path.join(DATA_DIR, 'games.json');
+fs.mkdirSync(DATA_DIR, { recursive: true });
+function readJson(file, fallback) { try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return fallback; } }
+function writeJson(file, data) { const temp = file + '.tmp'; fs.writeFileSync(temp, JSON.stringify(data, null, 2), { mode: 0o600 }); fs.renameSync(temp, file); }
+let users = readJson(USERS_FILE, []);
+let games = readJson(GAMES_FILE, []);
+const sessions = new Map(); // session tokens are random; cookies are HttpOnly.
+const rooms = new Map();
+const app = express();
+const server = http.createServer(app);
+const io = new Server(server, { cors: { origin: false }, maxHttpBufferSize: 1e5, pingInterval: 25000, pingTimeout: 20000 });
+app.disable('x-powered-by');
+app.use(express.json({ limit: '3mb' }));
+app.use((req, res, next) => { res.setHeader('X-Content-Type-Options', 'nosniff'); res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin'); res.setHeader('X-Frame-Options', 'SAMEORIGIN'); next(); });
+app.use(express.static(PLATFORM_DIR, { extensions: ['html'], index: 'index.html' }));
+function cookieValue(req, key) { const raw = req.headers.cookie || ''; for (const part of raw.split(';')) { const i = part.indexOf('='); if (i > -1 && part.slice(0, i).trim() === key) return decodeURIComponent(part.slice(i + 1).trim()); } return ''; }
+function currentUser(req) { const token = cookieValue(req, 'bw_session'); const session = sessions.get(token); if (!session || session.expires < Date.now()) { if (token) sessions.delete(token); return null; } return users.find(u => u.id === session.userId) || null; }
+function publicUser(u) { return { id: u.id, username: u.username }; }
+function requireUser(req, res, next) { const user = currentUser(req); if (!user) return res.status(401).json({ error: 'Entre na sua conta para continuar.' }); req.user = user; next(); }
+function setSession(res, user) { const token = crypto.randomBytes(32).toString('hex'); sessions.set(token, { userId: user.id, expires: Date.now() + 7 * 24 * 60 * 60 * 1000 }); const secure = process.env.NODE_ENV === 'production' ? '; Secure' : ''; res.setHeader('Set-Cookie', `bw_session=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${7 * 24 * 60 * 60}${secure}`); }
+function clearSession(req, res) { const token = cookieValue(req, 'bw_session'); if (token) sessions.delete(token); res.setHeader('Set-Cookie', 'bw_session=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0'); }
+function hashPassword(password, salt = crypto.randomBytes(16).toString('hex')) { const hash = crypto.scryptSync(password, salt, 64).toString('hex'); return { salt, hash }; }
+function validUsername(name) { return typeof name === 'string' && /^[\p{L}\p{N}_-]{3,24}$/u.test(name); }
+app.get('/api/status', (req, res) => res.json({ online: true, jogadores: io.engine.clientsCount, jogos: games.length }));
+app.get('/api/me', (req, res) => { const user = currentUser(req); res.json({ user: user ? publicUser(user) : null }); });
+app.post('/api/register', (req, res) => {
+  const username = String(req.body?.username || '').trim(); const password = req.body?.password;
+  if (!validUsername(username)) return res.status(400).json({ error: 'O nome deve ter 3â€“24 caracteres: letras, nÃºmeros, _ ou -.' });
+  if (typeof password !== 'string' || password.length < 8 || password.length > 128) return res.status(400).json({ error: 'A senha deve ter entre 8 e 128 caracteres.' });
+  if (users.some(u => u.username.toLowerCase() === username.toLowerCase())) return res.status(409).json({ error: 'Esse nome de usuÃ¡rio jÃ¡ estÃ¡ em uso.' });
+  const credentials = hashPassword(password); const user = { id: crypto.randomUUID(), username, salt: credentials.salt, passwordHash: credentials.hash, createdAt: Date.now() };
+  users.push(user); writeJson(USERS_FILE, users); setSession(res, user); res.status(201).json({ user: publicUser(user) });
+});
+app.post('/api/login', (req, res) => {
+  const username = String(req.body?.username || '').trim(); const password = req.body?.password;
+  const user = users.find(u => u.username.toLowerCase() === username.toLowerCase());
+  if (!user || typeof password !== 'string' || password.length > 128) return res.status(401).json({ error: 'Nome de usuÃ¡rio ou senha incorretos.' });
+  const hash = crypto.scryptSync(password, user.salt, 64).toString('hex'); const a = Buffer.from(hash, 'hex'); const b = Buffer.from(user.passwordHash, 'hex');
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return res.status(401).json({ error: 'Nome de usuÃ¡rio ou senha incorretos.' });
+  setSession(res, user); res.json({ user: publicUser(user) });
+});
+app.post('/api/logout', (req, res) => { clearSession(req, res); res.json({ ok: true }); });
+app.get('/api/games', (req, res) => { res.json({ games: games.filter(g => g.published).map(g => ({ id: g.id, title: g.title, description: g.description, category: g.category, url: g.url, creator: g.creator, createdAt: g.createdAt, icon: g.icon })) }); });
+app.post('/api/games', requireUser, (req, res) => {
+  const title = typeof req.body?.title === 'string' ? req.body.title.trim() : ''; const description = typeof req.body?.description === 'string' ? req.body.description.trim() : ''; const category = typeof req.body?.category === 'string' ? req.body.category.trim() : 'Outro'; const url = typeof req.body?.url === 'string' ? req.body.url.trim() : '';
+  if (title.length < 2 || title.length > 60) return res.status(400).json({ error: 'O tÃ­tulo precisa ter de 2 a 60 caracteres.' });
+  if (description.length < 5 || description.length > 500) return res.status(400).json({ error: 'A descriÃ§Ã£o precisa ter de 5 a 500 caracteres.' });
+  if (url && (!/^https:\/\//i.test(url) || url.length > 500 || !validHttpsUrl(url))) return res.status(400).json({ error: 'Use um link HTTPS vÃ¡lido para o jogo.' });
+  if (games.filter(g => g.creatorId === req.user.id).length >= 30) return res.status(429).json({ error: 'VocÃª atingiu o limite de 30 publicaÃ§Ãµes nesta versÃ£o.' });
+  const game = { id: crypto.randomUUID(), title, description, category: ['Aventura','ConstruÃ§Ã£o','Corrida','Obby','SimulaÃ§Ã£o','Outro'].includes(category) ? category : 'Outro', url, creatorId: req.user.id, creator: req.user.username, createdAt: Date.now(), published: true, icon: 'ðŸŽ®' };
+  games.unshift(game); writeJson(GAMES_FILE, games); res.status(201).json({ game: { id: game.id, title: game.title, description: game.description, category: game.category, url: game.url, creator: game.creator, createdAt: game.createdAt, icon: game.icon } });
+});
+function validHttpsUrl(value) { try { const u = new URL(value); return u.protocol === 'https:' && !u.username && !u.password; } catch { return false; } }
+app.delete('/api/games/:id', requireUser, (req, res) => { const game = games.find(g => g.id === req.params.id); if (!game) return res.status(404).json({ error: 'Jogo nÃ£o encontrado.' }); if (game.creatorId !== req.user.id) return res.status(403).json({ error: 'SÃ³ o criador pode remover esta publicaÃ§Ã£o.' }); games = games.filter(g => g.id !== game.id); writeJson(GAMES_FILE, games); res.json({ ok: true }); });
+
+// ===== BLOCKWORLD: PUBLICAÇÃO E EXECUÇÃO DE CENAS =====
+const PUBLISHED_DIR = path.join(ROOT, 'published');
+fs.mkdirSync(PUBLISHED_DIR, { recursive: true });
+function validScene(scene) {
+  if (!scene || typeof scene !== 'object' || !Array.isArray(scene.objects)) return false;
+  if (scene.objects.length > 500) return false;
+  const allowed = new Set(['Box', 'Sphere', 'Plane', 'Cylinder']);
+  for (const o of scene.objects) {
+    if (!o || typeof o !== 'object' || !allowed.has(o.type)) return false;
+    for (const key of ['position', 'rotation', 'scale']) {
+      const v = o[key];
+      if (!Array.isArray(v) || v.length !== 3 || !v.every(n => Number.isFinite(Number(n)))) return false;
+    }
+    if (typeof o.color !== 'string' || !/^#[0-9a-fA-F]{6}$/.test(o.color)) return false;
+    if (o.name !== undefined && (typeof o.name !== 'string' || o.name.length > 80)) return false;
+  }
+  return true;
+}
+app.post('/api/publish-scene', requireUser, (req, res) => {
+  const title = typeof req.body?.title === 'string' ? req.body.title.trim() : '';
+  const description = typeof req.body?.description === 'string' ? req.body.description.trim() : '';
+  const category = typeof req.body?.category === 'string' ? req.body.category : 'Outro';
+  const scene = req.body?.scene;
+  if (title.length < 2 || title.length > 60) return res.status(400).json({ error: 'O título deve ter de 2 a 60 caracteres.' });
+  if (description.length < 5 || description.length > 500) return res.status(400).json({ error: 'A descrição deve ter de 5 a 500 caracteres.' });
+  if (!validScene(scene)) return res.status(400).json({ error: 'Cena inválida. Use o formato JSON de exemplo e no máximo 500 objetos compatíveis.' });
+  if (games.filter(g => g.creatorId === req.user.id).length >= 30) return res.status(429).json({ error: 'Limite de 30 publicações por conta.' });
+  const id = crypto.randomUUID();
+  const safeScene = { version: 1, objects: scene.objects.map(o => ({ type: o.type, name: String(o.name || o.type).slice(0,80), position: o.position.map(Number), rotation: o.rotation.map(Number), scale: o.scale.map(n => Math.max(0.05, Math.min(100, Number(n)))), color: o.color })) };
+  const game = { id, title, description, category: ['Aventura','Construção','Corrida','Obby','Simulação','Outro'].includes(category) ? category : 'Outro', url: '/play/' + id, creatorId: req.user.id, creator: req.user.username, createdAt: Date.now(), published: true, icon: '🎮', sceneFile: id + '.json' };
+  const scenePath = path.join(PUBLISHED_DIR, id + '.json');
+  try { fs.writeFileSync(scenePath, JSON.stringify(safeScene), { flag: 'wx', mode: 0o600 }); games.unshift(game); writeJson(GAMES_FILE, games); }
+  catch (e) { try { fs.unlinkSync(scenePath); } catch {} return res.status(500).json({ error: 'Não foi possível salvar a publicação.' }); }
+  res.status(201).json({ game: { id, title, description, category: game.category, url: game.url, creator: game.creator, createdAt: game.createdAt, icon: game.icon, playUrl: game.url } });
+});
+app.get('/api/scenes/:id', (req, res) => {
+  if (!/^[0-9a-f-]{36}$/i.test(req.params.id)) return res.status(400).json({ error: 'ID inválido.' });
+  const game = games.find(g => g.id === req.params.id && g.published && g.sceneFile);
+  if (!game) return res.status(404).json({ error: 'Jogo publicado não encontrado.' });
+  try { res.setHeader('Cache-Control', 'no-store'); res.json(JSON.parse(fs.readFileSync(path.join(PUBLISHED_DIR, game.sceneFile), 'utf8'))); }
+  catch { res.status(404).json({ error: 'Os dados deste jogo não foram encontrados.' }); }
+});
+app.get('/play/:id', (req, res) => {
+  if (!/^[0-9a-f-]{36}$/i.test(req.params.id)) return res.status(400).send('ID inválido.');
+  const game = games.find(g => g.id === req.params.id && g.published && g.sceneFile);
+  if (!game) return res.status(404).send('Jogo publicado não encontrado.');
+  res.sendFile(path.join(PLATFORM_DIR, 'play.html'));
+});
+// ===== FIM BLOCKWORLD: PUBLICAÇÃO =====
+
+
+// BLOCKWORLD_LAUNCH_ENGINE_V1
+const { spawn } = require('child_process');
+const ENGINE_DIR = path.join(ROOT, 'BlockWorld-Engine-V2');
+const ENGINE_CLI = path.join(ENGINE_DIR, 'node_modules', 'electron', 'cli.js');
+
+app.post('/api/launch-engine', (req, res) => {
+  const address = String(req.socket.remoteAddress || '');
+  const local = address === '127.0.0.1' ||
+    address === '::1' ||
+    address === '::ffff:127.0.0.1';
+
+  if (!local) {
+    return res.status(403).json({ error: 'A inicialização só pode ser solicitada neste computador.' });
+  }
+
+  if (!fs.existsSync(ENGINE_CLI) || !fs.existsSync(path.join(ENGINE_DIR, 'main.js'))) {
+    return res.status(500).json({ error: 'A Game Engine V2 não foi encontrada.' });
+  }
+
+  try {
+    const child = spawn(process.execPath, [ENGINE_CLI, '.'], {
+      cwd: ENGINE_DIR,
+      detached: true,
+      stdio: 'ignore',
+      windowsHide: false
+    });
+    child.once('error', error => {
+      console.error('[BlockWorld] Falha ao iniciar a engine:', error.message);
+    });
+    child.unref();
+    return res.json({ ok: true, message: 'Solicitação de abertura enviada.' });
+  } catch (error) {
+    console.error('[BlockWorld] Falha ao iniciar a engine:', error.message);
+    return res.status(500).json({ error: 'Não foi possível iniciar a Game Engine V2.' });
+  }
+});
+app.get(/.*/, (req, res) => res.sendFile(path.join(PLATFORM_DIR, 'index.html')));
+
+function socketUser(socket) { const token = socket.request.cookiesMap?.bw_session; const session = sessions.get(token); if (!session || session.expires < Date.now()) return null; return users.find(u => u.id === session.userId) || null; }
+// Socket.IO's request cookie parser is intentionally small and uses the same HttpOnly session cookie.
+io.use((socket, next) => { const cookies = {}; for (const p of String(socket.request.headers.cookie || '').split(';')) { const i = p.indexOf('='); if (i > 0) cookies[p.slice(0, i).trim()] = decodeURIComponent(p.slice(i + 1).trim()); } socket.request.cookiesMap = cookies; const user = socketUser(socket); if (!user) return next(new Error('FaÃ§a login para usar o multiplayer.')); socket.user = publicUser(user); next(); });
+function makeCode() { const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; let code; do { code = Array.from({ length: 6 }, () => chars[crypto.randomInt(chars.length)]).join(''); } while (rooms.has(code)); return code; }
+function roomPlayer(socket) { return { id: socket.id, username: socket.user.username, x: 50, y: 55 }; }
+function roomList(room) { return [...room.players.values()]; }
+function leaveSocketRoom(socket) { const code = socket.data.roomCode; if (!code) return; const room = rooms.get(code); socket.leave(code); socket.data.roomCode = null; if (!room) return; room.players.delete(socket.id); if (room.players.size === 0) { rooms.delete(code); io.emit('roomClosed', { code }); } else { socket.to(code).emit('playerLeft', socket.id); io.to(code).emit('roomInfo', { code, count: room.players.size }); } }
+io.on('connection', socket => {
+  io.emit('onlineCount', io.engine.clientsCount);
+  socket.on('createRoom', (payload = {}) => { if (socket.data.roomCode) leaveSocketRoom(socket); if (rooms.size >= 500) return socket.emit('roomError', 'O servidor atingiu o limite de salas. Tente novamente mais tarde.'); const code = makeCode(); const room = { code, gameId: typeof payload.gameId === 'string' ? payload.gameId.slice(0, 80) : 'demo', players: new Map(), createdAt: Date.now() }; rooms.set(code, room); room.players.set(socket.id, roomPlayer(socket)); socket.join(code); socket.data.roomCode = code; socket.emit('roomJoined', { room: { code, gameId: room.gameId }, players: roomList(room) }); });
+  socket.on('joinRoom', (payload = {}) => { const code = String(payload.code || '').toUpperCase(); const room = rooms.get(code); if (!room) return socket.emit('roomError', 'Sala nÃ£o encontrada. Confira o cÃ³digo.'); if (room.players.size >= 12) return socket.emit('roomError', 'Essa sala estÃ¡ cheia (mÃ¡ximo de 12 jogadores).'); if (socket.data.roomCode) leaveSocketRoom(socket); room.players.set(socket.id, roomPlayer(socket)); socket.join(code); socket.data.roomCode = code; socket.emit('roomJoined', { room: { code, gameId: room.gameId }, players: roomList(room) }); socket.to(code).emit('playerJoined', room.players.get(socket.id)); io.to(code).emit('roomInfo', { code, count: room.players.size }); });
+  socket.on('move', (payload = {}) => { const code = socket.data.roomCode; const room = rooms.get(code); const player = room?.players.get(socket.id); if (!player) return; const x = Number(payload.x); const y = Number(payload.y); if (!Number.isFinite(x) || !Number.isFinite(y)) return; player.x = Math.max(5, Math.min(95, x)); player.y = Math.max(12, Math.min(83, y)); socket.to(code).emit('playerMoved', player); });
+  socket.on('leaveRoom', () => leaveSocketRoom(socket)); socket.on('disconnect', () => { leaveSocketRoom(socket); io.emit('onlineCount', io.engine.clientsCount - 1); });
+});
+setInterval(() => { const now = Date.now(); for (const [token, session] of sessions) if (session.expires < now) sessions.delete(token); for (const [code, room] of rooms) if (now - room.createdAt > 6 * 60 * 60 * 1000 && room.players.size === 0) rooms.delete(code); }, 60_000).unref();
+server.listen(PORT, HOST, () => { console.log('=================================='); console.log('   BLOCKWORLD ONLINE'); console.log(`   Plataforma: http://localhost:${PORT}`); console.log('   Contas, publicaÃ§Ãµes e salas carregadas'); console.log('   Pressione Ctrl+C para encerrar'); console.log('=================================='); });
+
+

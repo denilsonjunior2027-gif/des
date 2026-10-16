@@ -1,0 +1,147 @@
+
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BlockWorld Studio</title>
+  <style>
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: #101522;
+      color: white;
+      font-family: Arial, sans-serif;
+    }
+
+    header {
+      height: 58px;
+      background: #202b40;
+      display: flex;
+      align-items: center;
+      padding: 0 20px;
+      gap: 15px;
+      border-bottom: 1px solid #35435c;
+    }
+
+    .logo { font-size: 22px; font-weight: bold; color: #59baff; }
+    .menu { color: #c8d5e8; font-size: 14px; }
+
+    main {
+      display: grid;
+      grid-template-columns: 220px 1fr 250px;
+      height: calc(100vh - 58px);
+    }
+
+    aside {
+      background: #192235;
+      padding: 16px;
+      overflow: auto;
+    }
+
+    aside h3 { font-size: 14px; color: #8fcfff; }
+
+    button {
+      display: block;
+      width: 100%;
+      padding: 11px;
+      margin: 7px 0;
+      color: white;
+      background: #2b3b56;
+      border: 1px solid #405573;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+
+    button:hover { background: #385779; }
+
+    #viewport {
+      position: relative;
+      overflow: hidden;
+      background: #101522;
+    }
+
+    #scene {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    .hint {
+      position: absolute;
+      bottom: 12px;
+      left: 12px;
+      background: #192235dd;
+      padding: 10px;
+      border-radius: 6px;
+      font-size: 12px;
+      pointer-events: none;
+    }
+
+    .property {
+      padding: 10px;
+      margin: 8px 0;
+      background: #243149;
+      border-radius: 5px;
+      font-size: 13px;
+    }
+
+    #status {
+      color: #8ee6a2;
+      font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="logo">⬢ BlockWorld Studio</div>
+    <div class="menu">Arquivo</div>
+    <div class="menu">Editar</div>
+    <div class="menu">Modelo</div>
+    <div class="menu">Teste</div>
+    <div class="menu">Ajuda</div>
+  </header>
+
+  <main>
+    <aside>
+      <h3>EXPLORADOR</h3>
+      <div class="property">🌎 Workspace</div>
+      <div class="property">📷 Camera</div>
+      <div class="property">💡 Lighting</div>
+      <div class="property">🧱 Partes</div>
+
+      <h3>CRIAR OBJETO</h3>
+      <button id="block">＋ Bloco</button>
+      <button id="ball">＋ Esfera</button>
+      <button id="remove">✕ Remover último</button>
+
+      <h3>FERRAMENTAS</h3>
+      <button id="reset">↻ Reiniciar cena</button>
+      <p id="status">Editor iniciado!</p>
+    </aside>
+
+    <section id="viewport">
+      <canvas id="scene"></canvas>
+      <div class="hint">CENA 3D · Adicione blocos e esferas pelos botões</div>
+    </section>
+
+    <aside>
+      <h3>PROPRIEDADES</h3>
+      <div class="property">Nome: <span id="objectName">Nenhum objeto</span></div>
+      <div class="property">Objetos na cena: <span id="count">0</span></div>
+      <div class="property">Motor: Three.js</div>
+      <div class="property">Linguagem planejada: Lua</div>
+      <p style="font-size:12px;color:#aab9d0">
+        Selecione um objeto na cena para trabalhar nele.
+      </p>
+    </aside>
+  </main>
+
+  <script>
+  window.require = require;
+  window.module = module;
+</script>
+<script src="./renderer.js"></script>
+</body>
+</html>

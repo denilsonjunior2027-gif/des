@@ -1,0 +1,392 @@
+BLOCKWORLD - PREPARACAO DO MULTIPLAYER
+Data: 2026-10-15T16:38:37.740Z
+Pasta do projeto: C:\Users\denilson\Downloads\BlockWorld
+Pasta de backup: backups\multiplayer-2026-10-15T16-38-37-739Z
+
+========== BACKUP DOS ARQUIVOS ==========
+BACKUP OK: server.js
+  Tamanho: 16757 bytes
+  SHA256: d3eaf433a45d6852b40316ace5d5e2533f9f95267c2f1c6fb6d48aed4862760d
+BACKUP OK: platform/index.html
+  Tamanho: 43677 bytes
+  SHA256: c4474153f00c2c6b6a162e13741679a0c9a7f4b49b8c24b7fda07854fa6ae3be
+BACKUP OK: platform/play.html
+  Tamanho: 1171 bytes
+  SHA256: cc8c53508357650bbedbd4e2e14d14244223fca9bbe58a35f8c5c7aff892e8c1
+BACKUP OK: platform/play.js
+  Tamanho: 12582 bytes
+  SHA256: ec2114e82edabd4822a8755c51b980fa29fc98c42be584f3334bb770d29d9724
+BACKUP OK: data/games.json
+  Tamanho: 4690 bytes
+  SHA256: dc2e728a6fda0f5f2c9de3e0207a5d99d10a102fcd20c421351ba029dedce52a
+BACKUP OK: data/users.json
+  Tamanho: 967 bytes
+  SHA256: f37db8935de04daf76d81a31089540f617fa7a96b616192a05f718036cde772b
+BACKUP OK: package.json
+  Tamanho: 431 bytes
+  SHA256: 525df9be95c205a98c61cfb4be866c43ff7db74d1ee424ceda1a408094476a7c
+BACKUP OK: patch-server.js
+  Tamanho: 5647 bytes
+  SHA256: 921f2709f4d9e974db295a3a0185b463942d2ec17224e0513ea8743d919da20a
+
+========== BACKUP DOS DIRETORIOS DE JOGOS ==========
+PASTA COPIADA: published
+PASTA COPIADA: games
+
+========== ANALISE: server.js ==========
+Linhas: 168
+...
+  19: let users = readJson(USERS_FILE, []);
+  20: let games = readJson(GAMES_FILE, []);
+  21: const sessions = new Map(); // session tokens are random; cookies are HttpOnly.
+  22: const rooms = new Map();
+  23: const app = express();
+  24: const server = http.createServer(app);
+  25: const io = new Server(server, { cors: { origin: false }, maxHttpBufferSize: 1e5, pingInterval: 25000, pingTimeout: 20000 });
+  26: app.disable('x-powered-by');
+  27: app.use(express.json({ limit: '3mb' }));
+  28: app.use((req, res, next) => { res.setHeader('X-Content-Type-Options', 'nosniff'); res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin'); res.setHeader('X-Frame-Options', 'SAMEORIGIN'); next(); });
+...
+  30: function cookieValue(req, key) { const raw = req.headers.cookie || ''; for (const part of raw.split(';')) { const i = part.indexOf('='); if (i > -1 && part.slice(0, i).trim() === key) return decodeURIComponent(part.slice(i + 1).trim()); } return ''; }
+  31: function currentUser(req) { const token = cookieValue(req, 'bw_session'); const session = sessions.get(token); if (!session || session.expires < Date.now()) { if (token) sessions.delete(token); return null; } return users.find(u => u.id === session.userId) || null; }
+  32: function publicUser(u) { return { id: u.id, username: u.username }; }
+  33: function requireUser(req, res, next) { const user = currentUser(req); if (!user) return res.status(401).json({ error: 'Entre na sua conta para continuar.' }); req.user = user; next(); }
+  34: function setSession(res, user) { const token = crypto.randomBytes(32).toString('hex'); sessions.set(token, { userId: user.id, expires: Date.now() + 7 * 24 * 60 * 60 * 1000 }); const secure = process.env.NODE_ENV === 'production' ? '; Secure' : ''; res.setHeader('Set-Cookie', `bw_session=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${7 * 24 * 6
+  35: function clearSession(req, res) { const token = cookieValue(req, 'bw_session'); if (token) sessions.delete(token); res.setHeader('Set-Cookie', 'bw_session=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0'); }
+...
+  37: function validUsername(name) { return typeof name === 'string' && /^[\p{L}\p{N}_-]{3,24}$/u.test(name); }
+  38: app.get('/api/status', (req, res) => res.json({ online: true, jogadores: io.engine.clientsCount, jogos: games.length }));
+  39: app.get('/api/me', (req, res) => { const user = currentUser(req); res.json({ user: user ? publicUser(user) : null }); });
+  40: app.post('/api/register', (req, res) => {
+  41:   const username = String(req.body?.username || '').trim(); const password = req.body?.password;
+  42:   if (!validUsername(username)) return res.status(400).json({ error: 'O nome deve ter 3â€“24 caracteres: letras, nÃºmeros, _ ou -.' });
+...
+  44:   if (users.some(u => u.username.toLowerCase() === username.toLowerCase())) return res.status(409).json({ error: 'Esse nome de usuÃ¡rio jÃ¡ estÃ¡ em uso.' });
+  45:   const credentials = hashPassword(password); const user = { id: crypto.randomUUID(), username, salt: credentials.salt, passwordHash: credentials.hash, createdAt: Date.now() };
+  46:   users.push(user); writeJson(USERS_FILE, users); setSession(res, user); res.status(201).json({ user: publicUser(user) });
+  47: });
+  48: app.post('/api/login', (req, res) => {
+  49:   const username = String(req.body?.username || '').trim(); const password = req.body?.password;
+...
+  52:   const hash = crypto.scryptSync(password, user.salt, 64).toString('hex'); const a = Buffer.from(hash, 'hex'); const b = Buffer.from(user.passwordHash, 'hex');
+  53:   if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return res.status(401).json({ error: 'Nome de usuÃ¡rio ou senha incorretos.' });
+  54:   setSession(res, user); res.json({ user: publicUser(user) });
+  55: });
+  56: app.post('/api/logout', (req, res) => { clearSession(req, res); res.json({ ok: true }); });
+  57: app.get('/api/games', (req, res) => {
+...
+ 113:   return true;
+ 114: }
+ 115: app.post('/api/publish-scene', requireUser, (req, res) => {
+ 116:   const title = typeof req.body?.title === 'string' ? req.body.title.trim() : '';
+ 117:   const description = typeof req.body?.description === 'string' ? req.body.description.trim() : '';
+ 118:   const category = typeof req.body?.category === 'string' ? req.body.category : 'Outro';
+...
+ 130:   res.status(201).json({ game: { id, title, description, category: game.category, url: game.url, creator: game.creator, createdAt: game.createdAt, icon: game.icon, playUrl: game.url } });
+ 131: });
+ 132: app.get('/api/scenes/:id', (req, res) => {
+ 133:   if (!/^[0-9a-f-]{36}$/i.test(req.params.id)) return res.status(400).json({ error: 'ID inválido.' });
+ 134:   const game = games.find(g => g.id === req.params.id && g.published && g.sceneFile);
+ 135:   if (!game) return res.status(404).json({ error: 'Jogo publicado não encontrado.' });
+...
+ 137:   catch { res.status(404).json({ error: 'Os dados deste jogo não foram encontrados.' }); }
+ 138: });
+ 139: app.get('/play/:id', (req, res) => {
+ 140:   if (!/^[0-9a-f-]{36}$/i.test(req.params.id)) return res.status(400).send('ID inválido.');
+ 141:   const game = games.find(g => g.id === req.params.id && g.published && g.sceneFile);
+ 142:   if (!game) return res.status(404).send('Jogo publicado não encontrado.');
+...
+ 149: app.get(/.*/, (req, res) => res.sendFile(path.join(PLATFORM_DIR, 'index.html')));
+ 150: 
+ 151: function socketUser(socket) { const token = socket.request.cookiesMap?.bw_session; const session = sessions.get(token); if (!session || session.expires < Date.now()) return null; return users.find(u => u.id === session.userId) || null; }
+ 152: // Socket.IO's request cookie parser is intentionally small and uses the same HttpOnly session cookie.
+ 153: io.use((socket, next) => { const cookies = {}; for (const p of String(socket.request.headers.cookie || '').split(';')) { const i = p.indexOf('='); if (i > 0) cookies[p.slice(0, i).trim()] = decodeURIComponent(p.slice(i + 1).trim()); } socket.request.cookiesMap = cookies; const user = socketUser(socket); if (!user) return next(new Error('FaÃ§a login
+ 154: function makeCode() { const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; let code; do { code = Array.from({ length: 6 }, () => chars[crypto.randomInt(chars.length)]).join(''); } while (rooms.has(code)); return code; }
+ 155: function roomPlayer(socket) { return { id: socket.id, username: socket.user.username, x: 50, y: 55 }; }
+ 156: function roomList(room) { return [...room.players.values()]; }
+ 157: function leaveSocketRoom(socket) { const code = socket.data.roomCode; if (!code) return; const room = rooms.get(code); socket.leave(code); socket.data.roomCode = null; if (!room) return; room.players.delete(socket.id); if (room.players.size === 0) { rooms.delete(code); io.emit('roomClosed', { code }); } else { socket.to(code).emit('playerLeft', soc
+ 158: io.on('connection', socket => {
+ 159:   io.emit('onlineCount', io.engine.clientsCount);
+ 160:   socket.on('createRoom', (payload = {}) => { if (socket.data.roomCode) leaveSocketRoom(socket); if (rooms.size >= 500) return socket.emit('roomError', 'O servidor atingiu o limite de salas. Tente novamente mais tarde.'); const code = makeCode(); const room = { code, gameId: typeof payload.gameId === 'string' ? payload.gameId.slice(0, 80) : 'demo',
+ 161:   socket.on('joinRoom', (payload = {}) => { const code = String(payload.code || '').toUpperCase(); const room = rooms.get(code); if (!room) return socket.emit('roomError', 'Sala nÃ£o encontrada. Confira o cÃ³digo.'); if (room.players.size >= 12) return socket.emit('roomError', 'Essa sala estÃ¡ cheia (mÃ¡ximo de 12 jogadores).'); if (socket.data.roo
+ 162:   socket.on('move', (payload = {}) => { const code = socket.data.roomCode; const room = rooms.get(code); const player = room?.players.get(socket.id); if (!player) return; const x = Number(payload.x); const y = Number(payload.y); if (!Number.isFinite(x) || !Number.isFinite(y)) return; player.x = Math.max(5, Math.min(95, x)); player.y = Math.max(12, 
+ 163:   socket.on('leaveRoom', () => leaveSocketRoom(socket)); socket.on('disconnect', () => { leaveSocketRoom(socket); io.emit('onlineCount', io.engine.clientsCount - 1); });
+ 164: });
+ 165: setInterval(() => { const now = Date.now(); for (const [token, session] of sessions) if (session.expires < now) sessions.delete(token); for (const [code, room] of rooms) if (now - room.createdAt > 6 * 60 * 60 * 1000 && room.players.size === 0) rooms.delete(code); }, 60_000).unref();
+ 166: server.listen(PORT, HOST, () => { console.log('=================================='); console.log('   BLOCKWORLD ONLINE'); console.log(`   Plataforma: http://localhost:${PORT}`); console.log('   Contas, publicaÃ§Ãµes e salas carregadas'); console.log('   Pressione Ctrl+C para encerrar'); console.log('=================================='); });
+ 167: 
+ 168: 
+
+========== ANALISE: platform/play.js ==========
+Linhas: 330
+...
+  13: let socket = null;
+  14: let myId = null;
+  15: let roomCode = '';
+  16: let objects = new Map();
+  17: let players = new Map();
+  18: let keys = new Set();
+...
+  25: panel.innerHTML = `
+  26:   <strong>Multiplayer</strong>
+  27:   <button id="bwCreate">Criar sala</button>
+  28:   <input id="bwCode" maxlength="6" placeholder="CODIGO" aria-label="Codigo da sala" style="width:100px;text-transform:uppercase">
+  29:   <button id="bwJoin">Entrar na sala</button>
+  30:   <button id="bwLeave">Sair da sala</button>
+  31:   <span id="bwRoomStatus">Conectando...</span>
+  32:   <div style="flex-basis:100%;height:1px;background:#26334c"></div>
+  33:   <strong>Personalizar avatar</strong>
+  34:   <label>Pele <input type="color" id="bwSkin" value="${colors.skin}"></label>
+...
+  47: viewport.parentNode.insertBefore(panel, viewport);
+  48: 
+  49: const roomStatus = document.getElementById('bwRoomStatus');
+  50: function status(text, bad = false) {
+  51:   roomStatus.textContent = text;
+  52:   roomStatus.style.color = bad ? '#ff9999' : '#a9e8bf';
+...
+  88: }
+  89: 
+  90: function buildAvatar(player) {
+  91:   const group = new THREE.Group();
+  92:   const bodyMat = new THREE.MeshStandardMaterial({ color: '#635bdb' });
+  93:   const skinMat = new THREE.MeshStandardMaterial({ color: '#d9a078' });
+...
+ 123:   }
+ 124: }
+ 125: function upsertPlayer(player) {
+ 126:   let group = players.get(player.id);
+ 127:   if (!group) {
+ 128:     group = buildAvatar(player);
+...
+ 136:   if (player.id === myId) myPlayer = group;
+ 137: }
+ 138: function removePlayer(id) {
+ 139:   const group = players.get(id);
+ 140:   if (!group) return;
+ 141:   scene.remove(group);
+...
+ 150:   if (id === myId) myPlayer = null;
+ 151: }
+ 152: function clearRoom() {
+ 153:   for (const id of [...players.keys()]) removePlayer(id);
+ 154:   roomCode = '';
+ 155:   myPlayer = null;
+ 156:   status('Sem sala');
+ 157: }
+ 158: function ensureSocket() {
+ 159:   if (socket?.connected) return;
+ 160:   if (typeof window.io !== 'function') {
+ 161:     status('Socket.IO nao carregou. Atualize a pagina.', true);
+ 162:     return;
+ 163:   }
+ 164:   if (socket) return;
+ 165:   socket = window.io();
+ 166:   socket.on('connect', () => status('Conectado; entre ou crie uma sala'));
+ 167:   socket.on('connect_error', error => status(error.message || 'Entre na sua conta.', true));
+ 168:   socket.on('roomError', error => status(String(error), true));
+ 169:   socket.on('roomJoined', data => {
+ 170:     clearRoom();
+ 171:     roomCode = data.room.code;
+ 172:     myId = socket.id;
+ 173:     for (const player of data.players) upsertPlayer(player);
+ 174:     document.getElementById('bwCode').value = roomCode;
+ 175:     status(`Sala ${roomCode} · ${data.players.length}/12 jogadores`);
+ 176:   });
+ 177:   socket.on('playerJoined', upsertPlayer);
+ 178:   socket.on('playerUpdated', upsertPlayer);
+ 179:   socket.on('playerMoved3d', player => {
+ 180:     const group = players.get(player.id);
+ 181:     if (group) {
+ 182:       group.position.set(player.x, 0, player.z);
+...
+ 184:     }
+ 185:   });
+ 186:   socket.on('playerLeft', removePlayer);
+ 187:   socket.on('roomInfo', data => status(`Sala ${data.code} · ${data.count}/12 jogadores`));
+ 188:   socket.on('roomClosed', data => {
+ 189:     if (roomCode === data.code) clearRoom();
+ 190:   });
+ 191:   socket.on('avatarSaved', avatar => {
+ 192:     Object.assign(colors, avatar);
+ 193:     status('Avatar salvo na sua conta!');
+ 194:   });
+...
+ 198:   });
+ 199: }
+ 200: document.getElementById('bwCreate').onclick = () => {
+ 201:   ensureSocket();
+ 202:   if (socket?.connected) socket.emit('createRoom', { gameId });
+ 203: };
+ 204: document.getElementById('bwJoin').onclick = () => {
+ 205:   ensureSocket();
+ 206:   const code = document.getElementById('bwCode').value.trim().toUpperCase();
+ 207:   if (socket?.connected) socket.emit('joinRoom', { code, gameId });
+ 208: };
+ 209: document.getElementById('bwLeave').onclick = () => {
+ 210:   if (socket?.connected) socket.emit('leaveRoom');
+ 211:   clearRoom();
+ 212: };
+ 213: document.getElementById('bwSaveAvatar').onclick = () => {
+ 214:   ensureSocket();
+ 215:   if (socket?.connected) socket.emit('setAvatar', readColors());
+ 216:   else status('Entre na sua conta e conecte-se primeiro.', true);
+ 217: };
+ 218: 
+...
+ 228: window.addEventListener('blur', () => keys.clear());
+ 229: 
+ 230: async function main() {
+ 231:   try {
+ 232:     const response = await fetch(`/api/scenes/${encodeURIComponent(gameId)}`);
+ 233:     const data = await response.json();
+ 234:     if (!response.ok) throw new Error(data.error || 'Nao foi possivel carregar a cena.');
+ 235:     message.textContent = `Cena publicada · ${data.objects.length} objetos`;
+...
+ 292: 
+ 293:     function animate() {
+ 294:       requestAnimationFrame(animate);
+ 295:       const delta = Math.min(clock.getDelta(), 0.05);
+ 296:       if (myPlayer && roomCode) {
+ 297:         let dx = 0, dz = 0;
+ 298:         if (keys.has('w') || keys.has('arrowup')) dz -= 1;
+ 299:         if (keys.has('s') || keys.has('arrowdown')) dz += 1;
+...
+ 310:           if (moveTimer > 0.07 && socket?.connected) {
+ 311:             moveTimer = 0;
+ 312:             socket.emit('move3d', {
+ 313:               x: myPlayer.position.x,
+ 314:               z: myPlayer.position.z,
+ 315:               rotation: myPlayer.rotation.y
+
+========== ANALISE: platform/play.html ==========
+Linhas: 34
+...
+   3: <head>
+   4: <meta charset="utf-8">
+   5: <meta name="viewport" content="width=device-width,initial-scale=1">
+   6: <title>Jogar — BlockWorld</title>
+   7: <style>
+   8: *{box-sizing:border-box}
+...
+  10: header{height:64px;display:flex;align-items:center;justify-content:space-between;padding:0 20px;background:#11192b;border-bottom:1px solid #26334c}
+  11: a{color:#b7b2ff}
+  12: #viewport{width:100%;height:calc(100vh - 112px);min-height:360px}
+  13: canvas{display:block}
+  14: footer{padding:10px 18px;color:#9ca9c5;font-size:12px}
+  15: #message{padding:16px}
+...
+  19: <header><strong>◈ BlockWorld</strong><a href="/">Voltar à plataforma</a></header>
+  20: <div id="message">Carregando jogo...</div>
+  21: <div id="viewport"></div>
+  22: <footer>Jogo publicado na BlockWorld · Use o mouse para girar a câmera e a roda para aproximar.</footer>
+  23: <script type="importmap">
+  24: {
+  25:   "imports": {
+  26:     "three": "/vendor/three/build/three.module.js",
+  27:     "three/addons/": "/vendor/three/examples/jsm/"
+  28:   }
+  29: }
+  30: </script>
+  31: <script src="/socket.io/socket.io.js"></script>
+  32: <script type="module" src="/play.js"></script>
+  33: </body>
+  34: </html>
+
+========== ANALISE: platform/index.html ==========
+Linhas: 1027
+...
+ 332:             <div class="bw-classic-game-body">
+ 333:               <h3>Obby ClÃƒÂ¡ssico</h3><p>Supere plataformas e explore o cenÃƒÂ¡rio.</p>
+ 334:               <button type="button" data-bw-play="Obby ClÃƒÂ¡ssico">Jogar</button>
+ 335:             </div>
+ 336:           </article>
+ 337:           <article class="bw-classic-game" data-search="natureza floresta exploraÃƒÂ§ÃƒÂ£o verde">
+...
+ 339:             <div class="bw-classic-game-body">
+ 340:               <h3>Mundo Verde</h3><p>Explore um mundo cheio de possibilidades.</p>
+ 341:               <button type="button" data-bw-play="Mundo Verde">Jogar</button>
+ 342:             </div>
+ 343:           </article>
+ 344:           <article class="bw-classic-game" data-search="cidade construÃƒÂ§ÃƒÂ£o casas prÃƒÂ©dios">
+...
+ 346:             <div class="bw-classic-game-body">
+ 347:               <h3>Cidade Block</h3><p>Imagine e construa sua prÃƒÂ³pria cidade.</p>
+ 348:               <button type="button" data-bw-play="Cidade Block">Jogar</button>
+ 349:             </div>
+ 350:           </article>
+ 351:           <article class="bw-classic-game" data-search="aventura espaÃƒÂ§o planetas foguete">
+...
+ 353:             <div class="bw-classic-game-body">
+ 354:               <h3>ExpediÃƒÂ§ÃƒÂ£o Espacial</h3><p>Prepare-se para uma aventura entre planetas.</p>
+ 355:               <button type="button" data-bw-play="ExpediÃƒÂ§ÃƒÂ£o Espacial">Jogar</button>
+ 356:             </div>
+ 357:           </article>
+ 358:         </div>
+...
+ 364:           <h2>Crie seu prÃƒÂ³prio jogo</h2>
+ 365:           <p>Abra o editor 3D, crie objetos e experimente scripts Lua.</p>
+ 366:           <button type="button" class="bw-classic-primary" id="bwCreateGame">Abrir editor</button>
+ 367:         </section>
+ 368:         <section class="bw-classic-section">
+ 369:           <h2>Minha conta</h2>
+...
+ 530:       // BLOCKWORLD_LAUNCH_ENGINE_V1
+ 531:       async function abrirStudio() {
+ 532:         const botoes = [$("bwOpenStudio"), $("bwCreateGame")].filter(Boolean);
+ 533:         botoes.forEach(botao => botao.disabled = true);
+ 534: 
+ 535:         try {
+...
+ 559: 
+ 560:       $("bwOpenStudio").addEventListener("click", abrirStudio);
+ 561:       $("bwCreateGame").addEventListener("click", abrirStudio);
+ 562: 
+ 563:       document.querySelectorAll("[data-bw-page]").forEach(button => {
+ 564:         button.addEventListener("click", () => {
+...
+ 758: 
+ 759:       catalogo.addEventListener("click", async event => {
+ 760:         const botao = event.target.closest("[data-bw-play-url], [data-bw-play]");
+ 761:         if (!botao) return;
+ 762: 
+ 763:         const destino = botao.dataset.bwPlayUrl;
+...
+ 766:         } else {
+ 767:           alert('"' + (botao.dataset.bwPlay || "Jogo demonstrativo") +
+ 768:             '" e uma demonstracao. Crie e publique um jogo para jogar aqui.');
+ 769:         }
+ 770:       });
+ 771: 
+...
+ 821:             const botao = document.createElement("button");
+ 822:             botao.type = "button";
+ 823:             botao.textContent = "Jogar";
+ 824:             const destino = jogo.url || ("/play/" + encodeURIComponent(jogo.id));
+ 825:             if (destino.startsWith("/play/")) {
+ 826:               botao.dataset.bwPlayUrl = destino;
+
+========== ANALISE: package.json ==========
+Linhas: 24
+...
+   4:   "description": "Editor de jogos 3D BlockWorld",
+   5:   "main": "main.js",
+   6:   "scripts": {
+   7:     "start": "electron ."
+   8:   },
+   9:   "dependencies": {
+  10:     "fengari": "^0.1.5",
+  11:     "three": "^0.186.1"
+  12:   },
+  13:   "devDependencies": {
+  14:     "electron": "^44.7.0"
+
+========== ARQUIVOS E PASTAS PRINCIPAIS ==========
+[PASTA] backups
+[PASTA] data
+[PASTA] games
+[PASTA] node_modules
+[ARQUIVO] package.json
+[PASTA] platform
+[PASTA] published
+[ARQUIVO] server.js

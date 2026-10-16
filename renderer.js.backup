@@ -1,0 +1,1199 @@
+
+const THREE = require("three");
+const canvas = document.getElementById("scene");
+const viewport = document.getElementById("viewport");
+const status = document.getElementById("status");
+const count = document.getElementById("count");
+const objectName = document.getElementById("objectName");
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color("#91c9ed");
+
+const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 1000);
+camera.position.set(10, 9, 12);
+camera.lookAt(0, 0, 0);
+
+const renderer = new THREE.WebGLRenderer({
+  canvas,
+  antialias: true
+});
+
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+scene.add(new THREE.HemisphereLight(0xffffff, 0x61718b, 2));
+
+const sun = new THREE.DirectionalLight(0xffffff, 3);
+sun.position.set(8, 15, 10);
+sun.castShadow = true;
+scene.add(sun);
+
+// Chão
+const floor = new THREE.Mesh(
+  new THREE.PlaneGeometry(200, 200),
+  new THREE.MeshStandardMaterial({ color: "#79a85b" })
+);
+
+floor.rotation.x = -Math.PI / 2;
+floor.position.y = -0.06;
+floor.receiveShadow = true;
+scene.add(floor);
+
+// Grade de construção
+const grid = new THREE.GridHelper(100, 100, 0x526c50, 0x91aa88);
+grid.position.y = 0.01;
+scene.add(grid);
+
+const objects = [];
+let selected = null;
+let nextId = 1;
+
+const raycaster = new THREE.Raycaster();
+const pointer = new THREE.Vector2();
+
+function updateStatus(message) {
+  status.textContent = message;
+}
+
+function updateCount() {
+  count.textContent = objects.length;
+}
+
+function selectObject(object) {
+  if (selected) {
+    selected.material.emissive?.setHex(0x000000);
+  }
+
+  selected = object;
+
+  if (selected) {
+    selected.material.emissive?.setHex(0x333333);
+    objectName.textContent = selected.userData.name;
+    updateStatus("Selecionado: " + selected.userData.name);
+  } else {
+    objectName.textContent = "Nenhum objeto";
+  }
+}
+
+function addObject(type) {
+  let geometry;
+  let color;
+
+  if (type === "Esfera") {
+    geometry = new THREE.SphereGeometry(0.8, 32, 24);
+    color = "#ffca4b";
+  } else {
+    geometry = new THREE.BoxGeometry(2, 2, 2);
+    color = new THREE.Color().setHSL(Math.random(), 0.65, 0.55);
+  }
+
+  const material = new THREE.MeshStandardMaterial({ color });
+
+  const object = new THREE.Mesh(geometry, material);
+
+  object.position.set(
+    (Math.random() - 0.5) * 4,
+    1,
+    (Math.random() - 0.5) * 4
+  );
+
+  object.castShadow = true;
+  object.receiveShadow = true;
+  object.userData.name = type + "_" + nextId++;
+
+  scene.add(object);
+  objects.push(object);
+
+  selectObject(object);
+  updateCount();
+  updateStatus(type + " criado!");
+
+  return object;
+}
+
+function removeLastObject() {
+  if (objects.length === 0) {
+    updateStatus("Não há objetos para remover.");
+    return;
+  }
+
+  const object = objects.pop();
+
+  if (selected === object) selectObject(null);
+
+  scene.remove(object);
+  object.geometry.dispose();
+  object.material.dispose();
+
+  updateCount();
+  updateStatus("Último objeto removido.");
+}
+
+function resetScene() {
+  while (objects.length > 0) {
+    const object = objects.pop();
+    scene.remove(object);
+    object.geometry.dispose();
+    object.material.dispose();
+  }
+
+  selectObject(null);
+  updateCount();
+  updateStatus("Cena reiniciada!");
+  addObject("Bloco");
+}
+
+// Botões
+document.getElementById("block").addEventListener("click", () => {
+  addObject("Bloco");
+});
+
+document.getElementById("ball").addEventListener("click", () => {
+  addObject("Esfera");
+});
+
+document.getElementById("remove").addEventListener("click", removeLastObject);
+document.getElementById("reset").addEventListener("click", resetScene);
+
+// Selecionar objetos clicando na cena
+renderer.domElement.addEventListener("pointerdown", (event) => {
+  const rect = renderer.domElement.getBoundingClientRect();
+
+  pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+  pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+  raycaster.setFromCamera(pointer, camera);
+
+  const hits = raycaster.intersectObjects(objects);
+
+  if (hits.length > 0) {
+    selectObject(hits[0].object);
+  } else {
+    selectObject(null);
+  }
+});
+
+// Ajustar a tela
+function resize() {
+  const width = viewport.clientWidth;
+  const height = viewport.clientHeight;
+
+  if (!width || !height) return;
+
+  renderer.setSize(width, height, false);
+  camera.aspect = width / height;
+  camera.updateProjectionMatrix();
+}
+
+window.addEventListener("resize", resize);
+resize();
+
+// Criar o primeiro bloco automaticamente
+addObject("Bloco");
+
+// Renderização contínua
+function animate() {
+  requestAnimationFrame(animate);
+  renderer.render(scene, camera);
+}
+
+animate();
+
+console.log("BlockWorld Studio: motor 3D iniciado.");
+
+/* =========================================
+   BLOCKWORLD LUA ENGINE
+   Integração com Fengari
+   ========================================= */
+
+const luaUI = {
+  editor: document.getElementById("luaCode"),
+  run: document.getElementById("luaRun"),
+  clear: document.getElementById("luaClear"),
+  console: document.getElementById("luaConsole")
+};
+
+function luaLog(mensagem, tipo = "normal") {
+  if (!luaUI.console) return;
+
+  const linha = document.createElement("div");
+  linha.textContent = String(mensagem);
+
+  if (tipo === "erro") {
+    linha.style.color = "#ff8585";
+  } else if (tipo === "sucesso") {
+    linha.style.color = "#8ee6a2";
+  }
+
+  luaUI.console.appendChild(linha);
+  luaUI.console.scrollTop = luaUI.console.scrollHeight;
+}
+
+function criarAmbienteLua() {
+  const fengari = require("fengari");
+  const { lua, lauxlib, lualib, to_luastring, to_jsstring } = fengari;
+
+  const L = lauxlib.luaL_newstate();
+  lualib.luaL_openlibs(L);
+
+  // Redireciona print() para o console do editor.
+  lua.lua_pushjsfunction(L, function (estado) {
+    const quantidade = lua.lua_gettop(estado);
+    const partes = [];
+
+    for (let i = 1; i <= quantidade; i++) {
+      const valor = lua.lua_tostring(estado, i);
+      partes.push(valor ? to_jsstring(valor) : "(valor)");
+    }
+
+    luaLog(partes.join("\t"));
+    return 0;
+  });
+
+  lua.lua_setglobal(L, to_luastring("print"));
+
+  // criarBloco(x, y, z)
+  lua.lua_pushjsfunction(L, function (estado) {
+    const x = lua.lua_tonumber(estado, 1) || 0;
+    const y = lua.lua_tonumber(estado, 2) || 1;
+    const z = lua.lua_tonumber(estado, 3) || 0;
+
+    const objeto = addObject("Bloco");
+    objeto.position.set(x, y, z);
+
+    luaLog(
+      "Bloco criado em (" + x + ", " + y + ", " + z + ")",
+      "sucesso"
+    );
+
+    return 0;
+  });
+
+  lua.lua_setglobal(L, to_luastring("criarBloco"));
+
+  // criarEsfera(x, y, z)
+  lua.lua_pushjsfunction(L, function (estado) {
+    const x = lua.lua_tonumber(estado, 1) || 0;
+    const y = lua.lua_tonumber(estado, 2) || 1;
+    const z = lua.lua_tonumber(estado, 3) || 0;
+
+    const objeto = addObject("Esfera");
+    objeto.position.set(x, y, z);
+
+    luaLog(
+      "Esfera criada em (" + x + ", " + y + ", " + z + ")",
+      "sucesso"
+    );
+
+    return 0;
+  });
+
+  lua.lua_setglobal(L, to_luastring("criarEsfera"));
+
+  return { L, lua, lauxlib, to_luastring, to_jsstring };
+}
+
+luaUI.run.addEventListener("click", () => {
+  luaUI.console.textContent = "";
+
+  try {
+    const ambiente = criarAmbienteLua();
+    const { L, lua, lauxlib, to_luastring, to_jsstring } = ambiente;
+    const codigo = luaUI.editor.value;
+
+    const resultado = lauxlib.luaL_loadstring(
+      L,
+      to_luastring(codigo)
+    );
+
+    if (resultado !== lua.LUA_OK) {
+      const mensagem = lua.lua_tostring(L, -1);
+      luaLog(
+        "Erro de sintaxe: " +
+        (mensagem ? to_jsstring(mensagem) : "código inválido"),
+        "erro"
+      );
+      return;
+    }
+
+    const execucao = lua.lua_pcall(
+      L,
+      0,
+      lua.LUA_MULTRET,
+      0
+    );
+
+    if (execucao !== lua.LUA_OK) {
+      const mensagem = lua.lua_tostring(L, -1);
+      luaLog(
+        "Erro Lua: " +
+        (mensagem ? to_jsstring(mensagem) : "falha na execução"),
+        "erro"
+      );
+      return;
+    }
+
+    luaLog("Script executado!", "sucesso");
+  } catch (erro) {
+    luaLog("Falha ao iniciar Lua: " + erro.message, "erro");
+    console.error("BlockWorld Lua Engine:", erro);
+  }
+});
+
+luaUI.clear.addEventListener("click", () => {
+  luaUI.console.textContent = "";
+});
+
+luaLog("BlockWorld Lua Engine carregada.", "sucesso");
+
+function criarBotaoEditor(texto, acao) {
+  const barra = document.querySelector(".toolbar");
+
+  if (!barra) {
+    console.error("Barra de ferramentas não encontrada.");
+    return;
+  }
+
+  const botao = document.createElement("button");
+  botao.textContent = texto;
+  botao.style.margin = "4px";
+  botao.style.padding = "8px 12px";
+  botao.style.cursor = "pointer";
+  botao.addEventListener("click", acao);
+  barra.appendChild(botao);
+}
+
+criarBotaoEditor("🧍 Criar Rig R6", () => {
+  if (typeof criarRig === "function") {
+    criarRig("MeuPersonagem");
+  } else {
+    alert("O sistema Rig R6 ainda precisa ser conectado.");
+  }
+});
+
+criarBotaoEditor("🖥 Criar GUI", () => {
+  if (typeof criarGUI === "function") {
+    criarGUI("Minha Interface");
+  } else {
+    alert("O sistema de GUI ainda precisa ser conectado.");
+  }
+});
+
+console.log("Botões Rig R6 e GUI adicionados ao BlockWorld.");
+
+/* ==========================================
+   BLOCKWORLD - SISTEMA RIG R6 + GUI
+   ========================================== */
+
+function criarRig(nome = "MeuPersonagem") {
+  const rig = new THREE.Group();
+  rig.name = nome;
+
+  const material = new THREE.MeshStandardMaterial({
+    color: 0x22aaff,
+    roughness: 0.75
+  });
+
+  const partes = [
+    { nome: "Torso", tamanho: [1.4, 1.6, 0.7], pos: [0, 2.4, 0], cor: 0x2277dd },
+    { nome: "Head", tamanho: [0.9, 0.9, 0.9], pos: [0, 3.7, 0], cor: 0xffcc99 },
+    { nome: "LeftArm", tamanho: [0.45, 1.4, 0.5], pos: [-0.95, 2.4, 0], cor: 0xffcc99 },
+    { nome: "RightArm", tamanho: [0.45, 1.4, 0.5], pos: [0.95, 2.4, 0], cor: 0xffcc99 },
+    { nome: "LeftLeg", tamanho: [0.55, 1.3, 0.6], pos: [-0.35, 0.95, 0], cor: 0x334466 },
+    { nome: "RightLeg", tamanho: [0.55, 1.3, 0.6], pos: [0.35, 0.95, 0], cor: 0x334466 }
+  ];
+
+  const partesCriadas = [];
+
+  for (const parte of partes) {
+    const mesh = new THREE.Mesh(
+      new THREE.BoxGeometry(...parte.tamanho),
+      new THREE.MeshStandardMaterial({
+        color: parte.cor,
+        roughness: 0.75
+      })
+    );
+
+    mesh.name = parte.nome;
+    mesh.position.set(...parte.pos);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    mesh.userData.rig = nome;
+
+    rig.add(mesh);
+    partesCriadas.push(mesh);
+  }
+
+  rig.position.set(4, 0, 0);
+  scene.add(rig);
+
+  for (const parte of partesCriadas) {
+    objects.push(parte);
+  }
+
+  if (typeof updateCount === "function") updateCount();
+  if (typeof updateStatus === "function") {
+    updateStatus("Rig R6 criado: " + nome);
+  }
+
+  console.log("Rig R6 criado:", nome);
+  return rig;
+}
+
+/* GUI de teste dentro do viewport */
+
+function criarGUI(titulo = "Minha Interface") {
+  const area = document.getElementById("viewport");
+
+  if (!area) {
+    console.error("Viewport não encontrado.");
+    return;
+  }
+
+  const anterior = document.getElementById("bwGameGui");
+  if (anterior) anterior.remove();
+
+  if (getComputedStyle(area).position === "static") {
+    area.style.position = "relative";
+  }
+
+  const painel = document.createElement("div");
+  painel.id = "bwGameGui";
+
+  Object.assign(painel.style, {
+    position: "absolute",
+    top: "20px",
+    right: "20px",
+    width: "220px",
+    padding: "16px",
+    background: "#202b40",
+    color: "white",
+    border: "1px solid #4d8dff",
+    borderRadius: "12px",
+    fontFamily: "Arial, sans-serif",
+    zIndex: "1000",
+    boxShadow: "0 8px 24px #0008"
+  });
+
+  const cabecalho = document.createElement("h3");
+  cabecalho.textContent = titulo;
+  cabecalho.style.margin = "0 0 12px";
+
+  const descricao = document.createElement("p");
+  descricao.textContent = "Interface de teste do BlockWorld.";
+  descricao.style.fontSize = "13px";
+
+  const botao = document.createElement("button");
+  botao.textContent = "Clique aqui!";
+  Object.assign(botao.style, {
+    padding: "9px 12px",
+    background: "#3478f6",
+    color: "white",
+    border: "none",
+    borderRadius: "7px",
+    cursor: "pointer"
+  });
+
+  botao.addEventListener("click", () => {
+    descricao.textContent = "Funcionou! Sua GUI está ativa.";
+    console.log("Botão da GUI clicado!");
+  });
+
+  painel.append(cabecalho, descricao, botao);
+  area.appendChild(painel);
+
+  console.log("GUI criada:", titulo);
+  return painel;
+}
+
+/* =====================================================
+   BLOCKWORLD ANIMATION STUDIO - R6 + MOVIMENTO + TIMELINE
+   Adicionar ao final de renderer.js
+   ===================================================== */
+
+let bwRigAtual = null;
+let bwAnimEditor = null;
+const bwTeclas = new Set();
+let bwAnimacaoTocando = false;
+let bwTempoInicio = 0;
+let bwDuracao = 3;
+let bwQuadros = [];
+let bwUltimoTempo = 0;
+
+function criarRig(nome = "MeuPersonagem") {
+  if (bwRigAtual) {
+    scene.remove(bwRigAtual.root);
+    bwRigAtual.partes.forEach(p => {
+      const i = objects.indexOf(p);
+      if (i !== -1) objects.splice(i, 1);
+    });
+  }
+
+  const root = new THREE.Group();
+  root.name = nome;
+  root.position.set(4, 0, 0);
+
+  const partes = {};
+  const meshes = [];
+
+  function parte(nomeParte, tamanho, cor, pai, pos) {
+    const pivot = new THREE.Group();
+    pivot.name = nomeParte + "_Joint";
+    pivot.position.set(...pos);
+    pai.add(pivot);
+
+    const mesh = new THREE.Mesh(
+      new THREE.BoxGeometry(...tamanho),
+      new THREE.MeshStandardMaterial({
+        color: cor,
+        roughness: 0.7
+      })
+    );
+
+    mesh.name = nomeParte;
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    mesh.position.y = -tamanho[1] / 2;
+    mesh.userData.rig = nome;
+
+    pivot.add(mesh);
+    partes[nomeParte] = pivot;
+    meshes.push(mesh);
+    return pivot;
+  }
+
+  // Torso e cabeça
+  parte("Torso", [1.4, 1.6, 0.7], 0x2277dd, root, [0, 3, 0]);
+
+  const cabeca = new THREE.Group();
+  cabeca.name = "Head_Joint";
+  cabeca.position.set(0, 3.8, 0);
+  root.add(cabeca);
+
+  const cabecaMesh = new THREE.Mesh(
+    new THREE.BoxGeometry(0.9, 0.9, 0.9),
+    new THREE.MeshStandardMaterial({ color: 0xffcc99 })
+  );
+  cabecaMesh.name = "Head";
+  cabecaMesh.position.y = 0.45;
+  cabecaMesh.castShadow = true;
+  cabecaMesh.userData.rig = nome;
+  cabeca.add(cabecaMesh);
+  partes.Head = cabeca;
+  meshes.push(cabecaMesh);
+
+  // Braços e pernas articulados
+  parte("LeftArm", [0.45, 1.4, 0.5], 0xffcc99, root, [-0.95, 3.5, 0]);
+  parte("RightArm", [0.45, 1.4, 0.5], 0xffcc99, root, [0.95, 3.5, 0]);
+  parte("LeftLeg", [0.55, 1.5, 0.6], 0x334466, root, [-0.35, 1.6, 0]);
+  parte("RightLeg", [0.55, 1.5, 0.6], 0x334466, root, [0.35, 1.6, 0]);
+
+  scene.add(root);
+  meshes.forEach(m => objects.push(m));
+
+  bwRigAtual = { root, partes, partesMeshes: meshes, partes: meshes, joints: partes };
+  // Preservar também a referência dos pivôs.
+  bwRigAtual.joints = partes;
+
+  if (typeof updateCount === "function") updateCount();
+  if (typeof updateStatus === "function") updateStatus("Rig R6 articulado criado!");
+  console.log("Rig R6 articulado criado:", nome);
+
+  criarEditorAnimacao();
+  return root;
+}
+
+function bwCapturarPose() {
+  if (!bwRigAtual) return null;
+  const pose = {};
+
+  for (const [nome, joint] of Object.entries(bwRigAtual.joints)) {
+    pose[nome] = {
+      x: joint.rotation.x,
+      y: joint.rotation.y,
+      z: joint.rotation.z
+    };
+  }
+
+  return pose;
+}
+
+function bwAplicarPose(pose) {
+  if (!bwRigAtual || !pose) return;
+
+  for (const [nome, rot] of Object.entries(pose)) {
+    const joint = bwRigAtual.joints[nome];
+    if (!joint) continue;
+
+    joint.rotation.set(rot.x, rot.y, rot.z);
+  }
+}
+
+function bwGravarKeyframe() {
+  if (!bwRigAtual) {
+    alert("Crie primeiro um Rig R6.");
+    return;
+  }
+
+  const campo = document.getElementById("bwAnimTempo");
+  const tempo = Math.max(0, Number(campo?.value || 0));
+
+  const pose = bwCapturarPose();
+  const existente = bwQuadros.findIndex(q => q.tempo === tempo);
+
+  const quadro = { tempo, pose };
+  if (existente >= 0) bwQuadros[existente] = quadro;
+  else bwQuadros.push(quadro);
+
+  bwQuadros.sort((a, b) => a.tempo - b.tempo);
+  bwAtualizarTimeline();
+}
+
+function bwInterpolarPose(tempo) {
+  if (!bwQuadros.length) return;
+
+  let anterior = bwQuadros[0];
+  let seguinte = bwQuadros[bwQuadros.length - 1];
+
+  for (let i = 0; i < bwQuadros.length - 1; i++) {
+    if (
+      tempo >= bwQuadros[i].tempo &&
+      tempo <= bwQuadros[i + 1].tempo
+    ) {
+      anterior = bwQuadros[i];
+      seguinte = bwQuadros[i + 1];
+      break;
+    }
+  }
+
+  if (tempo <= anterior.tempo) {
+    bwAplicarPose(anterior.pose);
+    return;
+  }
+
+  if (tempo >= seguinte.tempo) {
+    bwAplicarPose(seguinte.pose);
+    return;
+  }
+
+  const t = (tempo - anterior.tempo) /
+    (seguinte.tempo - anterior.tempo);
+
+  const pose = {};
+
+  for (const nome of Object.keys(anterior.pose)) {
+    const a = anterior.pose[nome];
+    const b = seguinte.pose[nome];
+
+    pose[nome] = {
+      x: THREE.MathUtils.lerp(a.x, b.x, t),
+      y: THREE.MathUtils.lerp(a.y, b.y, t),
+      z: THREE.MathUtils.lerp(a.z, b.z, t)
+    };
+  }
+
+  bwAplicarPose(pose);
+}
+
+function bwAtualizarTimeline() {
+  const lista = document.getElementById("bwAnimQuadros");
+  if (!lista) return;
+
+  lista.replaceChildren();
+
+  if (!bwQuadros.length) {
+    lista.textContent = "Nenhum keyframe. Ajuste uma pose e grave.";
+    return;
+  }
+
+  bwQuadros.forEach((q, indice) => {
+    const linha = document.createElement("div");
+    linha.style.cssText =
+      "display:flex;gap:8px;align-items:center;margin:5px 0;";
+
+    const botao = document.createElement("button");
+    botao.textContent = `${q.tempo.toFixed(2)} s — Keyframe ${indice + 1}`;
+    botao.onclick = () => {
+      document.getElementById("bwAnimTempo").value = q.tempo;
+      bwAplicarPose(q.pose);
+    };
+
+    const excluir = document.createElement("button");
+    excluir.textContent = "✕";
+    excluir.title = "Excluir keyframe";
+    excluir.onclick = () => {
+      bwQuadros.splice(indice, 1);
+      bwAtualizarTimeline();
+    };
+
+    linha.append(botao, excluir);
+    lista.appendChild(linha);
+  });
+}
+
+function criarEditorAnimacao() {
+  if (bwAnimEditor) {
+    bwAnimEditor.style.display = "block";
+    return;
+  }
+
+  const area = document.getElementById("viewport");
+  if (!area) return;
+
+  bwAnimEditor = document.createElement("div");
+  bwAnimEditor.id = "bwAnimationStudio";
+
+  Object.assign(bwAnimEditor.style, {
+    position: "absolute",
+    left: "12px",
+    bottom: "12px",
+    width: "min(470px, 90%)",
+    maxHeight: "45%",
+    overflowY: "auto",
+    padding: "12px",
+    color: "#fff",
+    background: "#182235",
+    border: "1px solid #4d8dff",
+    borderRadius: "10px",
+    zIndex: "1100",
+    font: "13px Arial, sans-serif"
+  });
+
+  bwAnimEditor.innerHTML = `
+    <h3 style="margin:0 0 10px">🎞 Animation Studio</h3>
+    <p>Selecione uma parte do Rig e ajuste sua pose no painel de propriedades.
+    Depois grave um keyframe em cada tempo.</p>
+    <label>Tempo (segundos)
+      <input id="bwAnimTempo" type="number" min="0" max="60"
+        step="0.1" value="0" style="width:75px">
+    </label>
+    <button id="bwAnimGravar">＋ Gravar Keyframe</button>
+    <button id="bwAnimPlay">▶ Reproduzir</button>
+    <button id="bwAnimStop">■ Parar</button>
+    <div style="margin-top:10px">Timeline / Keyframes</div>
+    <div id="bwAnimQuadros" style="margin-top:6px"></div>
+    <button id="bwAnimFechar" style="margin-top:8px">Fechar</button>
+  `;
+
+  area.appendChild(bwAnimEditor);
+
+  document.getElementById("bwAnimGravar").onclick = bwGravarKeyframe;
+
+  document.getElementById("bwAnimPlay").onclick = () => {
+    if (!bwQuadros.length) {
+      alert("Grave pelo menos um keyframe.");
+      return;
+    }
+    bwDuracao = Math.max(0.1, bwQuadros[bwQuadros.length - 1].tempo);
+    bwTempoInicio = performance.now();
+    bwAnimacaoTocando = true;
+  };
+
+  document.getElementById("bwAnimStop").onclick = () => {
+    bwAnimacaoTocando = false;
+    bwInterpolarPose(0);
+  };
+
+  document.getElementById("bwAnimFechar").onclick = () => {
+    bwAnimEditor.style.display = "none";
+  };
+
+  bwAtualizarTimeline();
+}
+
+/* Movimento de teste com WASD */
+window.addEventListener("keydown", e => {
+  if (["INPUT", "TEXTAREA"].includes(document.activeElement?.tagName)) return;
+
+  if (["w", "a", "s", "d", "ArrowUp", "ArrowDown",
+       "ArrowLeft", "ArrowRight"].includes(e.key)) {
+    bwTeclas.add(e.key.toLowerCase());
+  }
+});
+
+window.addEventListener("keyup", e => {
+  bwTeclas.delete(e.key.toLowerCase());
+});
+
+window.addEventListener("blur", () => bwTeclas.clear());
+
+let bwUltimoFrame = performance.now();
+
+function bwAtualizarAnimacao() {
+  requestAnimationFrame(bwAtualizarAnimacao);
+
+  const agora = performance.now();
+  const dt = Math.min((agora - bwUltimoFrame) / 1000, 0.05);
+  bwUltimoFrame = agora;
+
+  if (!bwRigAtual) return;
+
+  const root = bwRigAtual.root;
+  const joints = bwRigAtual.joints;
+  const velocidade = 4;
+  let dx = 0;
+  let dz = 0;
+
+  if (bwTeclas.has("w") || bwTeclas.has("arrowup")) dz -= 1;
+  if (bwTeclas.has("s") || bwTeclas.has("arrowdown")) dz += 1;
+  if (bwTeclas.has("a") || bwTeclas.has("arrowleft")) dx -= 1;
+  if (bwTeclas.has("d") || bwTeclas.has("arrowright")) dx += 1;
+
+  const andando = dx !== 0 || dz !== 0;
+
+  if (andando) {
+    const comprimento = Math.hypot(dx, dz);
+    root.position.x += (dx / comprimento) * velocidade * dt;
+    root.position.z += (dz / comprimento) * velocidade * dt;
+    root.rotation.y = Math.atan2(dx, dz);
+
+    const fase = agora / 130;
+    joints.LeftArm.rotation.x = Math.sin(fase) * 0.65;
+    joints.RightArm.rotation.x = -Math.sin(fase) * 0.65;
+    joints.LeftLeg.rotation.x = -Math.sin(fase) * 0.65;
+    joints.RightLeg.rotation.x = Math.sin(fase) * 0.65;
+  } else if (!bwAnimacaoTocando) {
+    for (const joint of Object.values(joints)) {
+      joint.rotation.x *= 0.85;
+    }
+  }
+
+  if (bwAnimacaoTocando) {
+    const tempo = ((agora - bwTempoInicio) / 1000) % (bwDuracao || 1);
+    bwInterpolarPose(tempo);
+  }
+}
+
+bwAtualizarAnimacao();
+console.log("BlockWorld Animation Studio carregado.");
+
+/* =====================================================
+   BLOCKWORLD ANIMATION STUDIO PRO
+   Juntas, timeline visual e edição de keyframes
+   ===================================================== */
+
+let bwQuadroSelecionado = null;
+let bwJuntaSelecionada = "LeftArm";
+
+function criarEditorAnimacao() {
+  const area = document.getElementById("viewport");
+  if (!area) return;
+
+  let painel = document.getElementById("bwAnimationStudio");
+
+  if (!painel) {
+    painel = document.createElement("div");
+    painel.id = "bwAnimationStudio";
+
+    Object.assign(painel.style, {
+      position: "absolute",
+      left: "12px",
+      bottom: "12px",
+      width: "min(520px, 94%)",
+      maxHeight: "60%",
+      overflowY: "auto",
+      padding: "14px",
+      color: "#eef4ff",
+      background: "#111a2b",
+      border: "1px solid #4d8dff",
+      borderRadius: "12px",
+      zIndex: "1200",
+      font: "13px Arial, sans-serif",
+      boxShadow: "0 8px 30px #0009"
+    });
+
+    area.appendChild(painel);
+  }
+
+  painel.style.display = "block";
+  painel.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <h3 style="margin:0 0 12px">🎞 Animation Studio Pro</h3>
+      <button id="bwAnimFechar">✕</button>
+    </div>
+
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+      <label>Articulação
+        <select id="bwAnimJunta">
+          <option>Head</option>
+          <option>LeftArm</option>
+          <option>RightArm</option>
+          <option>LeftLeg</option>
+          <option>RightLeg</option>
+          <option>Torso</option>
+        </select>
+      </label>
+      <label>Tempo (s)
+        <input id="bwAnimTempo" type="number"
+          min="0" max="60" step="0.1" value="0" style="width:65px">
+      </label>
+    </div>
+
+    <div style="padding:10px;background:#1c2940;border-radius:8px">
+      <strong>Rotação da articulação</strong>
+      <p style="margin:5px 0;color:#a9bddc">
+        Ajuste os ângulos em graus.
+      </p>
+
+      <label style="display:block">X: <span id="bwAnimValorX">0°</span>
+        <input id="bwAnimX" type="range" min="-180" max="180" value="0"
+          style="width:100%">
+      </label>
+      <label style="display:block">Y: <span id="bwAnimValorY">0°</span>
+        <input id="bwAnimY" type="range" min="-180" max="180" value="0"
+          style="width:100%">
+      </label>
+      <label style="display:block">Z: <span id="bwAnimValorZ">0°</span>
+        <input id="bwAnimZ" type="range" min="-180" max="180" value="0"
+          style="width:100%">
+      </label>
+    </div>
+
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin:12px 0">
+      <button id="bwAnimAdicionar">＋ Adicionar keyframe</button>
+      <button id="bwAnimEditar">✎ Atualizar selecionado</button>
+      <button id="bwAnimExcluir">🗑 Excluir selecionado</button>
+    </div>
+
+    <div style="background:#0b1220;padding:10px;border-radius:8px">
+      <div style="display:flex;justify-content:space-between">
+        <strong>Timeline</strong>
+        <span id="bwAnimDuracao">0 keyframes</span>
+      </div>
+      <div id="bwAnimTrilho" style="
+        position:relative;height:46px;margin-top:12px;
+        background:linear-gradient(#243651,#17243a);
+        border-radius:6px;border-bottom:2px solid #4d8dff">
+      </div>
+      <div id="bwAnimQuadros" style="margin-top:8px"></div>
+    </div>
+
+    <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+      <button id="bwAnimPlay">▶ Reproduzir</button>
+      <button id="bwAnimStop">■ Parar</button>
+      <button id="bwAnimFechar2">Fechar editor</button>
+    </div>
+
+    <p style="color:#9eb1d0;margin-bottom:0">
+      Dica: selecione uma junta, ajuste X/Y/Z e grave poses em tempos diferentes.
+    </p>
+  `;
+
+  const el = id => document.getElementById(id);
+
+  function rigPronto() {
+    if (!bwRigAtual) {
+      alert("Clique primeiro em Criar Rig R6.");
+      return false;
+    }
+    return true;
+  }
+
+  function juntaAtual() {
+    return bwRigAtual?.joints?.[bwJuntaSelecionada];
+  }
+
+  function carregarControles() {
+    const junta = juntaAtual();
+    if (!junta) return;
+
+    const eixos = [
+      ["x", "bwAnimX", "bwAnimValorX"],
+      ["y", "bwAnimY", "bwAnimValorY"],
+      ["z", "bwAnimZ", "bwAnimValorZ"]
+    ];
+
+    for (const [eixo, inputId, textoId] of eixos) {
+      const graus = THREE.MathUtils.radToDeg(junta.rotation[eixo]);
+      el(inputId).value = Math.round(graus);
+      el(textoId).textContent = `${Math.round(graus)}°`;
+    }
+  }
+
+  function aplicarControles() {
+    const junta = juntaAtual();
+    if (!junta) return;
+
+    for (const eixo of ["x", "y", "z"]) {
+      const graus = Number(el("bwAnim" + eixo.toUpperCase()).value);
+      junta.rotation[eixo] = THREE.MathUtils.degToRad(graus);
+      el("bwAnimValor" + eixo.toUpperCase()).textContent = `${graus}°`;
+    }
+  }
+
+  function atualizarTimelinePro() {
+    const trilho = el("bwAnimTrilho");
+    const lista = el("bwAnimQuadros");
+    trilho.replaceChildren();
+    lista.replaceChildren();
+
+    const ultimo = Math.max(
+      1,
+      ...bwQuadros.map(q => q.tempo)
+    );
+
+    el("bwAnimDuracao").textContent =
+      `${bwQuadros.length} keyframes · ${ultimo.toFixed(1)} s`;
+
+    // Régua e marcadores visuais
+    for (let i = 0; i <= 4; i++) {
+      const marca = document.createElement("span");
+      marca.textContent = `${(ultimo * i / 4).toFixed(1)}s`;
+      Object.assign(marca.style, {
+        position: "absolute",
+        left: `${i * 25}%`,
+        top: "2px",
+        color: "#a9bddc",
+        fontSize: "10px"
+      });
+      trilho.appendChild(marca);
+    }
+
+    bwQuadros.forEach((q, indice) => {
+      const marcador = document.createElement("button");
+      marcador.title = `Selecionar keyframe em ${q.tempo}s`;
+      marcador.textContent = "◆";
+
+      Object.assign(marcador.style, {
+        position: "absolute",
+        left: `${Math.min(96, q.tempo / ultimo * 100)}%`,
+        top: "22px",
+        transform: "translateX(-50%)",
+        color: indice === bwQuadroSelecionado ? "#fff" : "#65a5ff",
+        background: "transparent",
+        border: "none",
+        cursor: "pointer",
+        fontSize: "17px"
+      });
+
+      marcador.onclick = () => selecionarQuadro(indice);
+      trilho.appendChild(marcador);
+
+      const linha = document.createElement("div");
+      Object.assign(linha.style, {
+        display: "flex",
+        gap: "8px",
+        marginTop: "5px"
+      });
+
+      const selecionar = document.createElement("button");
+      selecionar.textContent =
+        `${indice === bwQuadroSelecionado ? "▶ " : ""}${q.tempo.toFixed(2)} s`;
+      selecionar.style.flex = "1";
+      selecionar.onclick = () => selecionarQuadro(indice);
+
+      const remover = document.createElement("button");
+      remover.textContent = "Excluir";
+      remover.onclick = () => {
+        bwQuadros.splice(indice, 1);
+        if (bwQuadroSelecionado === indice) {
+          bwQuadroSelecionado = null;
+        } else if (bwQuadroSelecionado > indice) {
+          bwQuadroSelecionado--;
+        }
+        atualizarTimelinePro();
+      };
+
+      linha.append(selecionar, remover);
+      lista.appendChild(linha);
+    });
+  }
+
+  function selecionarQuadro(indice) {
+    const quadro = bwQuadros[indice];
+    if (!quadro) return;
+
+    bwQuadroSelecionado = indice;
+    el("bwAnimTempo").value = quadro.tempo;
+
+    bwAplicarPose(quadro.pose);
+    carregarControles();
+    atualizarTimelinePro();
+  }
+
+  el("bwAnimJunta").onchange = () => {
+    bwJuntaSelecionada = el("bwAnimJunta").value;
+    carregarControles();
+  };
+
+  for (const eixo of ["X", "Y", "Z"]) {
+    el("bwAnim" + eixo).oninput = aplicarControles;
+  }
+
+  el("bwAnimAdicionar").onclick = () => {
+    if (!rigPronto()) return;
+
+    const tempo = Math.max(0, Number(el("bwAnimTempo").value) || 0);
+    const pose = bwCapturarPose();
+    const existente = bwQuadros.findIndex(q => q.tempo === tempo);
+
+    if (existente >= 0) {
+      bwQuadros[existente] = { tempo, pose };
+      bwQuadroSelecionado = existente;
+    } else {
+      bwQuadros.push({ tempo, pose });
+      bwQuadros.sort((a, b) => a.tempo - b.tempo);
+      bwQuadroSelecionado = bwQuadros.findIndex(q => q.tempo === tempo);
+    }
+
+    atualizarTimelinePro();
+  };
+
+  el("bwAnimEditar").onclick = () => {
+    if (!rigPronto()) return;
+
+    if (bwQuadroSelecionado === null ||
+        !bwQuadros[bwQuadroSelecionado]) {
+      alert("Selecione primeiro um keyframe na timeline.");
+      return;
+    }
+
+    bwQuadros[bwQuadroSelecionado].pose = bwCapturarPose();
+    bwQuadros[bwQuadroSelecionado].tempo =
+      Math.max(0, Number(el("bwAnimTempo").value) || 0);
+
+    bwQuadros.sort((a, b) => a.tempo - b.tempo);
+    bwQuadroSelecionado = null;
+    atualizarTimelinePro();
+  };
+
+  el("bwAnimExcluir").onclick = () => {
+    if (bwQuadroSelecionado === null) {
+      alert("Selecione um keyframe para excluir.");
+      return;
+    }
+
+    bwQuadros.splice(bwQuadroSelecionado, 1);
+    bwQuadroSelecionado = null;
+    atualizarTimelinePro();
+  };
+
+  el("bwAnimPlay").onclick = () => {
+    if (!rigPronto() || !bwQuadros.length) {
+      alert("Crie um Rig e grave pelo menos um keyframe.");
+      return;
+    }
+
+    bwQuadros.sort((a, b) => a.tempo - b.tempo);
+    bwDuracao = Math.max(0.1, bwQuadros[bwQuadros.length - 1].tempo);
+    bwTempoInicio = performance.now();
+    bwAnimacaoTocando = true;
+  };
+
+  el("bwAnimStop").onclick = () => {
+    bwAnimacaoTocando = false;
+    if (bwQuadros.length) bwInterpolarPose(0);
+    carregarControles();
+  };
+
+  const fechar = () => painel.style.display = "none";
+  el("bwAnimFechar").onclick = fechar;
+  el("bwAnimFechar2").onclick = fechar;
+
+  carregarControles();
+  atualizarTimelinePro();
+}
+
+console.log("Animation Studio Pro instalado.");

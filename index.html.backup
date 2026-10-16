@@ -1,0 +1,862 @@
+
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BlockWorld Studio</title>
+
+<style>
+:root {
+  --bg: #101319;
+  --panel: #191e27;
+  --panel2: #202733;
+  --line: #303a49;
+  --text: #e9eef7;
+  --muted: #8e9bad;
+  --blue: #56a8ff;
+  --green: #42d392;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  height: 100vh;
+  overflow: hidden;
+  color: var(--text);
+  background: var(--bg);
+  font: 13px "Segoe UI", Arial, sans-serif;
+}
+
+button, input, textarea {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+  color: var(--text);
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 8px 10px;
+  transition: background .15s, border-color .15s;
+}
+
+button:hover {
+  background: #303d50;
+  border-color: #536987;
+}
+
+button:active {
+  transform: translateY(1px);
+}
+
+.app {
+  height: 100vh;
+  display: grid;
+  grid-template-rows: 48px 42px minmax(0, 1fr) 25px;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 0 15px;
+  background: #171c24;
+  border-bottom: 1px solid var(--line);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 16px;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.brand-icon {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  background: linear-gradient(135deg, #61c9ff, #6475ff);
+  color: white;
+  border-radius: 8px;
+}
+
+.top-menu {
+  display: flex;
+  gap: 5px;
+  color: #aeb9c9;
+}
+
+.top-menu button {
+  background: transparent;
+  border-color: transparent;
+  padding: 7px 9px;
+}
+
+.top-menu button:hover {
+  background: var(--panel2);
+}
+
+.top-spacer {
+  flex: 1;
+}
+
+.status-pill {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #a9b7c9;
+  font-size: 11px;
+}
+
+.status-dot {
+  width: 7px;
+  height: 7px;
+  background: var(--green);
+  border-radius: 50%;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 12px;
+  background: #1b2029;
+  border-bottom: 1px solid var(--line);
+}
+
+.tool-label {
+  margin-right: 5px;
+  color: var(--muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .7px;
+}
+
+.tool-button {
+  padding: 6px 11px;
+}
+
+.primary {
+  color: white;
+  background: #287bd2;
+  border-color: #398de5;
+}
+
+.primary:hover {
+  background: #368fe8;
+}
+
+.danger {
+  color: #ffb4b4;
+}
+
+.main {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 218px minmax(0, 1fr) 245px;
+}
+
+.sidebar {
+  min-height: 0;
+  overflow-y: auto;
+  background: var(--panel);
+}
+
+.left-sidebar {
+  border-right: 1px solid var(--line);
+}
+
+.right-sidebar {
+  border-left: 1px solid var(--line);
+}
+
+.panel-heading {
+  height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--line);
+  color: #c8d3e2;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .7px;
+}
+
+.panel-content {
+  padding: 12px;
+}
+
+.section-title {
+  margin: 15px 0 8px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+
+.section-title:first-child {
+  margin-top: 0;
+}
+
+.explorer-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  margin: 3px 0;
+  padding: 9px;
+  border: 1px solid transparent;
+  background: transparent;
+  text-align: left;
+  color: #c9d4e4;
+}
+
+.explorer-item:hover {
+  background: #252d3a;
+}
+
+.explorer-icon {
+  width: 20px;
+  text-align: center;
+}
+
+.tool-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 7px;
+}
+
+.tool-card {
+  min-height: 64px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 7px 3px;
+  font-size: 11px;
+}
+
+.tool-card span {
+  font-size: 21px;
+}
+
+.workspace {
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: minmax(180px, 1fr) 285px;
+  background: #111720;
+}
+
+.viewport-panel {
+  position: relative;
+  min-height: 0;
+  overflow: hidden;
+  background: #111720;
+}
+
+.viewport-heading {
+  position: absolute;
+  z-index: 2;
+  top: 10px;
+  left: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  color: #dce6f5;
+  background: #151d29e8;
+  border: 1px solid #354256;
+  border-radius: 6px;
+  font-size: 11px;
+  pointer-events: none;
+}
+
+#viewport {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: #111720;
+}
+
+#scene {
+  display: block;
+  width: 100%;
+  height: 100%;
+  outline: none;
+}
+
+.viewport-help {
+  position: absolute;
+  z-index: 2;
+  bottom: 10px;
+  left: 12px;
+  padding: 8px 10px;
+  border-radius: 5px;
+  background: #151d29e8;
+  color: #b7c4d7;
+  font-size: 11px;
+  pointer-events: none;
+}
+
+.lua-workspace {
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: 38px minmax(0, 1fr) 30px;
+  background: #151a22;
+  border-top: 1px solid var(--line);
+}
+
+.lua-tabs {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+  padding-left: 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.lua-tab {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #c8d3e2;
+  border-bottom: 2px solid var(--blue);
+}
+
+.lua-tab span {
+  color: #68b7ff;
+}
+
+.lua-body {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 200px;
+}
+
+.lua-editor-wrap {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  background: #10151d;
+}
+
+.line-numbers {
+  width: 37px;
+  flex: 0 0 37px;
+  padding: 12px 8px;
+  overflow: hidden;
+  background: #171d26;
+  color: #65748a;
+  border-right: 1px solid #293343;
+  text-align: right;
+  font: 12px/20px Consolas, monospace;
+  white-space: pre;
+  user-select: none;
+}
+
+#luaCode {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  resize: none;
+  border: 0;
+  outline: none;
+  padding: 12px;
+  background: #10151d;
+  color: #c5e1ff;
+  caret-color: white;
+  font: 12px/20px Consolas, "Courier New", monospace;
+  tab-size: 2;
+  white-space: pre;
+}
+
+.lua-side {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 10px;
+  border-left: 1px solid var(--line);
+  background: #191f29;
+}
+
+.lua-side-title {
+  margin-bottom: 9px;
+  color: #9eacbf;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .7px;
+}
+
+.lua-actions {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.lua-actions button {
+  text-align: left;
+}
+
+.lua-run {
+  background: #167b51;
+  border-color: #26986a;
+}
+
+.lua-run:hover {
+  background: #209665;
+}
+
+#luaConsole {
+  flex: 1;
+  min-height: 55px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  padding: 8px;
+  background: #0d1219;
+  border: 1px solid #2b3545;
+  border-radius: 5px;
+  color: #a7dfb9;
+  font: 11px/1.6 Consolas, monospace;
+}
+
+.lua-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 10px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.lua-footer button {
+  padding: 4px 8px;
+  font-size: 10px;
+}
+
+.property-card {
+  padding: 10px;
+  margin-bottom: 8px;
+  background: #202733;
+  border: 1px solid #2e394a;
+  border-radius: 6px;
+}
+
+.property-label {
+  margin-bottom: 6px;
+  color: var(--muted);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: .6px;
+}
+
+.property-value {
+  overflow-wrap: anywhere;
+  color: #e3eaf5;
+}
+
+.property-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 0;
+  border-bottom: 1px solid #2a3442;
+  color: #b6c3d5;
+  font-size: 12px;
+}
+
+.property-row:last-child {
+  border-bottom: 0;
+}
+
+#status {
+  margin: 10px 0;
+  color: var(--green);
+  font-size: 11px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+#count {
+  color: #8fc6ff;
+}
+
+.bottom-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 0 10px;
+  background: #171c24;
+  border-top: 1px solid var(--line);
+  color: #9aa8bb;
+  font-size: 10px;
+}
+
+.bottom-status span {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 1000px) {
+  .main {
+    grid-template-columns: 175px minmax(0, 1fr);
+  }
+
+  .right-sidebar {
+    display: none;
+  }
+
+  .workspace {
+    grid-template-rows: minmax(180px, 1fr) 265px;
+  }
+
+  .lua-body {
+    grid-template-columns: minmax(0, 1fr) 170px;
+  }
+
+  .top-menu {
+    display: none;
+  }
+}
+
+@media (max-width: 650px) {
+  .main {
+    grid-template-columns: 1fr;
+  }
+
+  .left-sidebar {
+    display: none;
+  }
+
+  .workspace {
+    grid-template-rows: minmax(180px, 1fr) 260px;
+  }
+
+  .lua-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .lua-side {
+    display: none;
+  }
+
+  .brand {
+    font-size: 13px;
+  }
+
+  .status-pill {
+    display: none;
+  }
+}
+</style>
+</head>
+
+<body>
+<div class="app">
+
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-icon">⬢</div>
+      <span>BlockWorld <span style="color:#8290a4;font-weight:400">Studio</span></span>
+    </div>
+
+    <nav class="top-menu">
+      <button id="menuFile">Arquivo</button>
+      <button id="menuEdit">Editar</button>
+      <button id="menuView">Exibir</button>
+      <button id="menuHelp">Ajuda</button>
+    </nav>
+
+    <div class="top-spacer"></div>
+
+    <div class="status-pill">
+      <span class="status-dot"></span>
+      Editor local
+    </div>
+  </header>
+
+  <div class="toolbar">
+    <span class="tool-label">Construir</span>
+    <button id="block" class="tool-button">＋ Bloco</button>
+    <button id="ball" class="tool-button">◯ Esfera</button>
+    <button id="remove" class="tool-button danger">✕ Remover</button>
+    <button id="reset" class="tool-button">↻ Reiniciar</button>
+    <div class="top-spacer"></div>
+    <button id="luaRunTop" class="primary">▶ Executar Lua</button>
+  </div>
+
+  <main class="main">
+
+    <aside class="sidebar left-sidebar">
+      <div class="panel-heading">
+        <span>EXPLORADOR</span>
+        <span>☷</span>
+      </div>
+
+      <div class="panel-content">
+        <div class="section-title">CENA</div>
+
+        <div class="explorer-item">
+          <span class="explorer-icon">🌎</span> Workspace
+        </div>
+        <div class="explorer-item">
+          <span class="explorer-icon">📷</span> Camera
+        </div>
+        <div class="explorer-item">
+          <span class="explorer-icon">☀️</span> Lighting
+        </div>
+        <div class="explorer-item">
+          <span class="explorer-icon">🧱</span> Parts
+        </div>
+
+        <div class="section-title">CRIAR OBJETO</div>
+
+        <div class="tool-grid">
+          <button id="sideBlock" class="tool-card">
+            <span>🧊</span> Bloco
+          </button>
+          <button id="sideBall" class="tool-card">
+            <span>🔵</span> Esfera
+          </button>
+        </div>
+
+        <div class="section-title">FERRAMENTAS</div>
+        <button id="sideReset" style="width:100%">↻ Limpar cena</button>
+
+        <div class="section-title">ESTADO</div>
+        <div id="status">Iniciando editor...</div>
+      </div>
+    </aside>
+
+    <section class="workspace">
+
+      <div id="viewport" class="viewport-panel">
+        <div class="viewport-heading">
+          <span>🌎</span>
+          <strong>Workspace</strong>
+          <span style="color:#8b9ab0">/</span>
+          <span>Visualização 3D</span>
+        </div>
+
+        <canvas id="scene"></canvas>
+
+        <div class="viewport-help">
+          CENA 3D · Crie objetos pela barra de ferramentas
+        </div>
+      </div>
+
+      <section class="lua-workspace">
+        <div class="lua-tabs">
+          <div class="lua-tab">
+            <span>◈</span> Script.lua
+          </div>
+        </div>
+
+        <div class="lua-body">
+          <div class="lua-editor-wrap">
+            <div id="lineNumbers" class="line-numbers">1
+2
+3
+4</div>
+
+            <textarea id="luaCode" spellcheck="false"
+              wrap="off" aria-label="Editor de código Lua">print("Olá, BlockWorld!")
+
+local bloco = criarBloco(0, 1, 0)
+print("Bloco criado com sucesso!")</textarea>
+          </div>
+
+          <aside class="lua-side">
+            <div class="lua-side-title">EXECUÇÃO</div>
+
+            <div class="lua-actions">
+              <button id="luaRun" class="lua-run">▶ Executar script</button>
+              <button id="luaClear">⌫ Limpar console</button>
+            </div>
+
+            <div class="lua-side-title">CONSOLE LUA</div>
+            <div id="luaConsole">Lua Engine pronta.</div>
+          </aside>
+        </div>
+
+        <div class="lua-footer">
+          <span>Lua · Fengari</span>
+          <span>Script local</span>
+          <button id="saveLua">Salvar código</button>
+        </div>
+      </section>
+
+    </section>
+
+    <aside class="sidebar right-sidebar">
+      <div class="panel-heading">
+        <span>PROPRIEDADES</span>
+        <span>⚙</span>
+      </div>
+
+      <div class="panel-content">
+        <div class="section-title">SELEÇÃO</div>
+
+        <div class="property-card">
+          <div class="property-label">Objeto selecionado</div>
+          <div class="property-value" id="objectName">Nenhum objeto</div>
+        </div>
+
+        <div class="section-title">ESTATÍSTICAS</div>
+
+        <div class="property-card">
+          <div class="property-row">
+            <span>Objetos na cena</span>
+            <strong id="count">0</strong>
+          </div>
+          <div class="property-row">
+            <span>Renderizador</span>
+            <strong>Three.js</strong>
+          </div>
+          <div class="property-row">
+            <span>Linguagem</span>
+            <strong>Lua</strong>
+          </div>
+        </div>
+
+        <div class="section-title">INFORMAÇÕES</div>
+
+        <div class="property-card">
+          <div class="property-label">BlockWorld Studio</div>
+          <div style="color:#aab8ca;line-height:1.7">
+            Editor 3D experimental com execução de scripts Lua.
+          </div>
+        </div>
+      </div>
+    </aside>
+
+  </main>
+
+  <footer class="bottom-status">
+    <span>⬢ BlockWorld Studio</span>
+    <span id="footerStatus">Pronto</span>
+    <span>Lua Engine · Three.js</span>
+  </footer>
+
+</div>
+
+<script src="./renderer.js"></script>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+
+  $("sideBlock").addEventListener("click", () => $("block").click());
+  $("sideBall").addEventListener("click", () => $("ball").click());
+  $("sideReset").addEventListener("click", () => $("reset").click());
+  $("luaRunTop").addEventListener("click", () => $("luaRun").click());
+
+  const code = $("luaCode");
+  const lines = $("lineNumbers");
+
+  function updateLines() {
+    const quantidade = Math.max(1, code.value.split("\n").length);
+    lines.textContent = Array.from(
+      { length: quantidade },
+      (_, i) => i + 1
+    ).join("\n");
+  }
+
+  code.addEventListener("input", updateLines);
+
+  code.addEventListener("scroll", () => {
+    lines.scrollTop = code.scrollTop;
+  });
+
+  code.addEventListener("keydown", event => {
+    if (event.key === "Tab") {
+      event.preventDefault();
+
+      const start = code.selectionStart;
+      const end = code.selectionEnd;
+
+      code.setRangeText("  ", start, end, "end");
+      updateLines();
+    }
+
+    if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+      event.preventDefault();
+      $("luaRun").click();
+    }
+  });
+
+  $("saveLua").addEventListener("click", () => {
+    const blob = new Blob([code.value], {
+      type: "text/plain;charset=utf-8"
+    });
+
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+
+    link.href = url;
+    link.download = "Script.lua";
+    link.click();
+
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+
+    $("footerStatus").textContent = "Script exportado";
+  });
+
+  $("menuFile").addEventListener("click", () => {
+    $("saveLua").click();
+  });
+
+  $("menuEdit").addEventListener("click", () => {
+    code.focus();
+  });
+
+  $("menuView").addEventListener("click", () => {
+    $("viewport").scrollIntoView({ block: "nearest" });
+  });
+
+  $("menuHelp").addEventListener("click", () => {
+    alert(
+      "BlockWorld Studio\n\n" +
+      "Crie objetos 3D e execute scripts Lua.\n" +
+      "Atalho: Ctrl + Enter para executar Lua."
+    );
+  });
+
+  updateLines();
+
+  const status = $("status");
+  const observer = new MutationObserver(() => {
+    $("footerStatus").textContent = status.textContent || "Pronto";
+  });
+
+  observer.observe(status, {
+    childList: true,
+    characterData: true,
+    subtree: true
+  });
+})();
+</script>
+
+</body>
+</html>

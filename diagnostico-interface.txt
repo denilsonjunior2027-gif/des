@@ -1,0 +1,50 @@
+
+=== platform/index.html ===
+    /* MantÃƒÂ©m o editor existente oculto atÃƒÂ© o usuÃƒÂ¡rio clicar em Criar. */
+    <nav class="bw-classic-nav" aria-label="NavegaÃƒÂ§ÃƒÂ£o principal">
+      <button type="button" data-bw-page="home">InÃƒÂ­cio</button>
+          <p>Explore jogos, crie experiÃƒÂªncias e construa seu prÃƒÂ³prio universo.</p>
+iv class="bw-classic-game-art" aria-hidden="true">Ã°Å¸Â§Â±</div>
+              <h3>Obby ClÃƒÂ¡ssico</h3><p>Supere plataformas e explore o cenÃƒÂ¡rio.</p>
+       <button type="button" data-bw-play="Obby ClÃƒÂ¡ssico">Jogar</button>
+assic-game" data-search="natureza floresta exploraÃƒÂ§ÃƒÂ£o verde">
+iv class="bw-classic-game-art" aria-hidden="true">Ã°Å¸Å’Â³</div>
+lass="bw-classic-game" data-search="cidade construÃƒÂ§ÃƒÂ£o casas prÃƒÂ©dios">
+iv class="bw-classic-game-art" aria-hidden="true">Ã°Å¸ÂËœÃ¯Â¸Â</div>
+ <h3>Cidade Block</h3><p>Imagine e construa sua prÃƒÂ³pria cidade.</p>
+class="bw-classic-game" data-search="aventura espaÃƒÂ§o planetas foguete">
+iv class="bw-classic-game-art" aria-hidden="true">Ã°Å¸Å¡â‚¬</div>
+              <h3>ExpediÃƒÂ§ÃƒÂ£o Espacial</h3><p>Prepare-se para uma aventura entre planetas.</p>
+        <button type="button" data-bw-play="ExpediÃƒÂ§ÃƒÂ£o Espacial">Jogar</button>
+          <h2>Crie seu prÃƒÂ³prio jogo</h2>
+tton type="button" class="bw-classic-primary" id="bwCreateGame">Abrir editor</button>
+<p id="bwProfileMessage">Perfil local de demonstraÃƒÂ§ÃƒÂ£o</p>
+        BlockWorld Ã‚Â· Plataforma experimental de jogos<br>
+        CatÃƒÂ¡logo demonstrativo local Ã¢â‚¬â€ sem contas ou publicaÃƒÂ§ÃƒÂ£o onl
+ine nesta versÃƒÂ£o.
+      <button type="button" id="block">Ã°Å¸Â§Â± Bloco</button>
+      <button type="button" id="remove">Ã°Å¸â€”â€˜ Remover ÃƒÂºltimo</button>
+        <div class="app-panel-title">Ã°Å¸Â§Â° Explorar</div>
+
+=== platform/play.js ===
+  <button id="bwCreate">Criar sala</button>
+  <button id="bwJoin">Entrar na sala</button>
+  <button id="bwLeave">Sair da sala</button>
+  <span id="bwRoomStatus">Conectando...</span>
+const roomStatus = document.getElementById('bwRoomStatus');
+  socket.on('roomJoined', data => {
+  socket.on('roomClosed', data => {
+document.getElementById('bwCreate').onclick = () => {
+  if (socket?.connected) socket.emit('createRoom', { gameId });
+document.getElementById('bwJoin').onclick = () => {
+  if (socket?.connected) socket.emit('joinRoom', { code, gameId });
+document.getElementById('bwLeave').onclick = () => {
+  if (socket?.connected) socket.emit('leaveRoom');
+
+=== server.js ===
+layers.size === 0) { rooms.delete(code); io.emit('roomClosed', { code }); } else { socket.to(code).emit('playerLeft', socket.id); 
+  socket.on('createRoom', (payload = {}) => { if (socket.data.roomCode) leaveSocketRoom(socke
+(code); socket.data.roomCode = code; socket.emit('roomJoined', { room: { code, gameId: room.gameId }, players: roomList(room) }); 
+  socket.on('joinRoom', (payload = {}) => { const code = String(payload.code || '').toUpper
+(code); socket.data.roomCode = code; socket.emit('roomJoined', { room: { code, gameId: room.gameId }, players: roomList(room) }); 
+  socket.on('leaveRoom', () => leaveSocketRoom(socket)); socket.on('disconnect', () => { lea

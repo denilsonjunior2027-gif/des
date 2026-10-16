@@ -1,0 +1,424 @@
+
+========== platform/play.js ==========
+
+--- let roomCode | posição 455 ---
+t viewport = document.getElementById('viewport');
+const gameId = location.pathname.split('/').filter(Boolean).pop();
+const colors = {
+  skin: '#d9a078',
+  hair: '#38251c',
+  shirt: '#635bdb',
+  pants: '#27344d'
+};
+let socket = null;
+let myId = null;
+let roomCode = '';
+let objects = new Map();
+let players = new Map();
+let keys = new Set();
+let myPlayer = null;
+let moveTimer = 0;
+
+const panel = document.createElement('section');
+panel.id = 'bwMultiplayerPanel';
+panel.style.cssText = 'margin:12px;padding:14px;background:#11192b;border:1px solid #26334c;border-radius:14px;color:#eef2ff;font:14px system-ui;display:flex;gap:12px;flex-wrap:wrap;align-items:center';
+panel.innerHTML = `
+  <strong>Multiplayer</strong>
+  <button id="bwCreate">Criar sala</button>
+  <input id="bwCode" maxlength="6" placeholder="CODIGO" aria-label="Codigo da sala" style="width:100px;text-transform:uppercase">
+  <button id="bwJoin">Entrar na sala</button>
+  <button id="bwLeave">Sair da sala</button>
+  <span id="bwRoomStatus">Conectando...</span>
+  <div style="flex-basis:100%;height:1px;background:#26334c"></div>
+  <strong>Personalizar avatar</strong>
+  <label>Pele
+
+--- panel.innerHTML | posição 872 ---
+t('section');
+panel.id = 'bwMultiplayerPanel';
+panel.style.cssText = 'margin:12px;padding:14px;background:#11192b;border:1px solid #26334c;border-radius:14px;color:#eef2ff;font:14px system-ui;display:flex;gap:12px;flex-wrap:wrap;align-items:center';
+panel.innerHTML = `
+  <strong>Multiplayer</strong>
+  <button id="bwCreate">Criar sala</button>
+  <input id="bwCode" maxlength="6" placeholder="CODIGO" aria-label="Codigo da sala" style="width:100px;text-transform:uppercase">
+  <button id="bwJoin">Entrar na sala</button>
+  <button id="bwLeave">Sair da sala</button>
+  <span id="bwRoomStatus">Conectando...</span>
+  <div style="flex-basis:100%;height:1px;background:#26334c"></div>
+  <strong>Personalizar avatar</strong>
+  <label>Pele <input type="color" id="bwSkin" value="${colors.skin}"></label>
+  <label>Cabelo <input type="color" id="bwHair" value="${colors.hair}"></label>
+  <label>Camisa <input type="color" id="bwShirt" value="${colors.shirt}"></label>
+  <label>Calça <input type="color" id="bwPants" value="${colors.pants}"></label>
+  <button id="bwSaveAvatar">Salvar avatar</button>
+  <span style="color:#9ca9c5">Movimente com WASD ou setas.
+
+--- socket.on('roomJoined' | posição 6359 ---
+ = window.io();
+  socket.on('connect', () => status('Conectado; entre ou crie uma sala'));
+  socket.on('connect_error', error => status(error.message || 'Entre na sua conta.', true));
+  socket.on('roomError', error => status(String(error), true));
+  socket.on('roomJoined', data => {
+    clearRoom();
+    roomCode = data.room.code;
+    myId = socket.id;
+    for (const player of data.players) upsertPlayer(player);
+    document.getElementById('bwCode').value = roomCode;
+    status(`Sala ${roomCode} · ${data.players.length}/12 jogadores`);
+  });
+  socket.on('playerJoined', upsertPlayer);
+  socket.on('playerUpdated', upsertPlayer);
+  socket.on('playerMoved3d', player => {
+    const group = players.get(player.id);
+    if (group) {
+      group.position.set(player.x, 0, player.z);
+      group.rotation.y = player.rotation || 0;
+    }
+  });
+  socket.on('playerLeft', removePlayer);
+  socket.on('roomInfo', data => status(`Sala ${data.code} · ${data.count}/12 jogadores`));
+  socket.on('roomClosed', data => {
+    if (roomCode === data.code) clearRoom();
+  });
+  socket.on('avatarSaved', avatar => {
+    Object.assign(colors, avatar);
+    status('Ava
+
+--- socket.on('playerJoined' | posição 6658 ---
+;
+    roomCode = data.room.code;
+    myId = socket.id;
+    for (const player of data.players) upsertPlayer(player);
+    document.getElementById('bwCode').value = roomCode;
+    status(`Sala ${roomCode} · ${data.players.length}/12 jogadores`);
+  });
+  socket.on('playerJoined', upsertPlayer);
+  socket.on('playerUpdated', upsertPlayer);
+  socket.on('playerMoved3d', player => {
+    const group = players.get(player.id);
+    if (group) {
+      group.position.set(player.x, 0, player.z);
+      group.rotation.y = player.rotation || 0;
+    }
+  });
+  socket.on('playerLeft', removePlayer);
+  socket.on('roomInfo', data => status(`Sala ${data.code} · ${data.count}/12 jogadores`));
+  socket.on('roomClosed', data => {
+    if (roomCode === data.code) clearRoom();
+  });
+  socket.on('avatarSaved', avatar => {
+    Object.assign(colors, avatar);
+    status('Avatar salvo na sua conta!');
+  });
+  socket.on('disconnect', () => {
+    clearRoom();
+    status('Desconectado do servidor.', true);
+  });
+}
+document.getElementById('bwCreate').onclick = () => {
+  ensureSocket();
+  if (socket?.connected) socket.emit('createRoom', { gameId });
+};
+document.getElementBy
+
+--- socket.on('playerMoved' | posição -1 ---
+
+--- socket.on('roomClosed' | posição 7085 ---
+roup) {
+      group.position.set(player.x, 0, player.z);
+      group.rotation.y = player.rotation || 0;
+    }
+  });
+  socket.on('playerLeft', removePlayer);
+  socket.on('roomInfo', data => status(`Sala ${data.code} · ${data.count}/12 jogadores`));
+  socket.on('roomClosed', data => {
+    if (roomCode === data.code) clearRoom();
+  });
+  socket.on('avatarSaved', avatar => {
+    Object.assign(colors, avatar);
+    status('Avatar salvo na sua conta!');
+  });
+  socket.on('disconnect', () => {
+    clearRoom();
+    status('Desconectado do servidor.', true);
+  });
+}
+document.getElementById('bwCreate').onclick = () => {
+  ensureSocket();
+  if (socket?.connected) socket.emit('createRoom', { gameId });
+};
+document.getElementById('bwJoin').onclick = () => {
+  ensureSocket();
+  const code = document.getElementById('bwCode').value.trim().toUpperCase();
+  if (socket?.connected) socket.emit('joinRoom', { code, gameId });
+};
+document.getElementById('bwLeave').onclick = () => {
+  if (socket?.connected) socket.emit('leaveRoom');
+  clearRoom();
+};
+document.getElementById('bwSaveAvatar').onclick = () => {
+  ensureSocket();
+  if (socket?.connected) socket.
+
+--- socket.on('move' | posição -1 ---
+
+--- document.getElementById('bwCreate') | posição 7398 ---
+e) clearRoom();
+  });
+  socket.on('avatarSaved', avatar => {
+    Object.assign(colors, avatar);
+    status('Avatar salvo na sua conta!');
+  });
+  socket.on('disconnect', () => {
+    clearRoom();
+    status('Desconectado do servidor.', true);
+  });
+}
+document.getElementById('bwCreate').onclick = () => {
+  ensureSocket();
+  if (socket?.connected) socket.emit('createRoom', { gameId });
+};
+document.getElementById('bwJoin').onclick = () => {
+  ensureSocket();
+  const code = document.getElementById('bwCode').value.trim().toUpperCase();
+  if (socket?.connected) socket.emit('joinRoom', { code, gameId });
+};
+document.getElementById('bwLeave').onclick = () => {
+  if (socket?.connected) socket.emit('leaveRoom');
+  clearRoom();
+};
+document.getElementById('bwSaveAvatar').onclick = () => {
+  ensureSocket();
+  if (socket?.connected) socket.emit('setAvatar', readColors());
+  else status('Entre na sua conta e conecte-se primeiro.', true);
+};
+
+window.addEventListener('keydown', event => {
+  if (['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName)) return;
+  const key = event.key.toLowerCase();
+  if (['w', 'a', 's', 'd', 'arrowup', 'arrowdo
+
+--- document.getElementById('bwJoin') | posição 7537 ---
+ });
+  socket.on('disconnect', () => {
+    clearRoom();
+    status('Desconectado do servidor.', true);
+  });
+}
+document.getElementById('bwCreate').onclick = () => {
+  ensureSocket();
+  if (socket?.connected) socket.emit('createRoom', { gameId });
+};
+document.getElementById('bwJoin').onclick = () => {
+  ensureSocket();
+  const code = document.getElementById('bwCode').value.trim().toUpperCase();
+  if (socket?.connected) socket.emit('joinRoom', { code, gameId });
+};
+document.getElementById('bwLeave').onclick = () => {
+  if (socket?.connected) socket.emit('leaveRoom');
+  clearRoom();
+};
+document.getElementById('bwSaveAvatar').onclick = () => {
+  ensureSocket();
+  if (socket?.connected) socket.emit('setAvatar', readColors());
+  else status('Entre na sua conta e conecte-se primeiro.', true);
+};
+
+window.addEventListener('keydown', event => {
+  if (['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName)) return;
+  const key = event.key.toLowerCase();
+  if (['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(key)) {
+    keys.add(key);
+    event.preventDefault();
+  }
+});
+window.addEventListener('keyup', ev
+
+--- document.getElementById('bwLeave') | posição 7755 ---
+t('createRoom', { gameId });
+};
+document.getElementById('bwJoin').onclick = () => {
+  ensureSocket();
+  const code = document.getElementById('bwCode').value.trim().toUpperCase();
+  if (socket?.connected) socket.emit('joinRoom', { code, gameId });
+};
+document.getElementById('bwLeave').onclick = () => {
+  if (socket?.connected) socket.emit('leaveRoom');
+  clearRoom();
+};
+document.getElementById('bwSaveAvatar').onclick = () => {
+  ensureSocket();
+  if (socket?.connected) socket.emit('setAvatar', readColors());
+  else status('Entre na sua conta e conecte-se primeiro.', true);
+};
+
+window.addEventListener('keydown', event => {
+  if (['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName)) return;
+  const key = event.key.toLowerCase();
+  if (['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(key)) {
+    keys.add(key);
+    event.preventDefault();
+  }
+});
+window.addEventListener('keyup', event => keys.delete(event.key.toLowerCase()));
+window.addEventListener('blur', () => keys.clear());
+
+async function main() {
+  try {
+    const response = await fetch(`/api/scenes/${encodeURIComponent(gameId)}`);
+    con
+
+--- function clearRoom | posição 5758 ---
+verse(item => {
+    if (item.geometry) item.geometry.dispose();
+    if (item.material) {
+      if (item.material.map) item.material.map.dispose();
+      item.material.dispose();
+    }
+  });
+  players.delete(id);
+  if (id === myId) myPlayer = null;
+}
+function clearRoom() {
+  for (const id of [...players.keys()]) removePlayer(id);
+  roomCode = '';
+  myPlayer = null;
+  status('Sem sala');
+}
+function ensureSocket() {
+  if (socket?.connected) return;
+  if (typeof window.io !== 'function') {
+    status('Socket.IO nao carregou. Atualize a pagina.', true);
+    return;
+  }
+  if (socket) return;
+  socket = window.io();
+  socket.on('connect', () => status('Conectado; entre ou crie uma sala'));
+  socket.on('connect_error', error => status(error.message || 'Entre na sua conta.', true));
+  socket.on('roomError', error => status(String(error), true));
+  socket.on('roomJoined', data => {
+    clearRoom();
+    roomCode = data.room.code;
+    myId = socket.id;
+    for (const player of data.players) upsertPlayer(player);
+    document.getElementById('bwCode').value = roomCode;
+    status(`Sala ${roomCode} · ${data.players.length}/12 jogadores`);
+  });
+  
+
+--- function upsertPlayer | posição 4978 ---
+};
+  const mats = group.userData.mats;
+  for (const [key, mat] of [['skin', mats.skinMat], ['hair', mats.hairMat], ['shirt', mats.bodyMat], ['pants', mats.pantsMat]]) {
+    if (/^#[0-9a-f]{6}$/i.test(safe[key] || '')) mat.color.set(safe[key]);
+  }
+}
+function upsertPlayer(player) {
+  let group = players.get(player.id);
+  if (!group) {
+    group = buildAvatar(player);
+    scene.add(group);
+    players.set(player.id, group);
+  }
+  group.position.set(player.x || 0, 0, player.z || 0);
+  group.rotation.y = player.rotation || 0;
+  group.userData.label.material.needsUpdate = true;
+  applyAvatar(group, player.avatar);
+  if (player.id === myId) myPlayer = group;
+}
+function removePlayer(id) {
+  const group = players.get(id);
+  if (!group) return;
+  scene.remove(group);
+  group.traverse(item => {
+    if (item.geometry) item.geometry.dispose();
+    if (item.material) {
+      if (item.material.map) item.material.map.dispose();
+      item.material.dispose();
+    }
+  });
+  players.delete(id);
+  if (id === myId) myPlayer = null;
+}
+function clearRoom() {
+  for (const id of [...players.keys()]) removePlayer(id);
+  roomCode = '';
+  myPlayer = null;
+  s
+
+========== server.js ==========
+
+--- const rooms | posição 1014 ---
+eFileSync(temp, JSON.stringify(data, null, 2), { mode: 0o600 }); fs.renameSync(temp, file); }
+let users = readJson(USERS_FILE, []);
+let games = readJson(GAMES_FILE, []);
+const sessions = new Map(); // session tokens are random; cookies are HttpOnly.
+const rooms = new Map();
+const app = express();
+const server = http.createServer(app);
+const io = new Server(server, { cors: { origin: false }, maxHttpBufferSize: 1e5, pingInterval: 25000, pingTimeout: 20000 });
+app.disable('x-powered-by');
+app.use(express.json({ limit: '3mb' }));
+app.use((req, res, next) => { res.setHeader('X-Content-Type-Options', 'nosniff'); res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin'); res.setHeader('X-Frame-Options', 'SAMEORIGIN'); next(); });
+app.use(express.static(PLATFORM_DIR, { extensions: ['html'], index: 'index.html' }));
+function cookieValue(req, key) { const raw = req.headers.cookie || ''; for (const part of raw.split(';')) { const i = part.indexOf('='); if (i > -1 && part.slice(0, i).trim() === key) return decodeURIComponent(part.slice(i + 1).trim()); } return ''; }
+function currentUser(req) { const token = cookieValue(req, 'bw_sessio
+
+--- function makeCode | posição 13219 ---
+0, i).trim()] = decodeURIComponent(p.slice(i + 1).trim()); } socket.request.cookiesMap = cookies; const user = socketUser(socket); if (!user) return next(new Error('FaÃ§a login para usar o multiplayer.')); socket.user = publicUser(user); next(); });
+function makeCode() { const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; let code; do { code = Array.from({ length: 6 }, () => chars[crypto.randomInt(chars.length)]).join(''); } while (rooms.has(code)); return code; }
+function roomPlayer(socket) { return { id: socket.id, username: socket.user.username, x: 50, y: 55 }; }
+function roomList(room) { return [...room.players.values()]; }
+function leaveSocketRoom(socket) { const code = socket.data.roomCode; if (!code) return; const room = rooms.get(code); socket.leave(code); socket.data.roomCode = null; if (!room) return; room.players.delete(socket.id); if (room.players.size === 0) { rooms.delete(code); io.emit('roomClosed', { code }); } else { socket.to(code).emit('playerLeft', socket.id); io.to(code).emit('roomInfo', { code, count: room.players.size }); } }
+io.on('connection', socket => {
+  io.emit('onlineCount', io.engine.clientsCount);
+  soc
+
+--- function leaveSocketRoom | posição 13603 ---
+ypto.randomInt(chars.length)]).join(''); } while (rooms.has(code)); return code; }
+function roomPlayer(socket) { return { id: socket.id, username: socket.user.username, x: 50, y: 55 }; }
+function roomList(room) { return [...room.players.values()]; }
+function leaveSocketRoom(socket) { const code = socket.data.roomCode; if (!code) return; const room = rooms.get(code); socket.leave(code); socket.data.roomCode = null; if (!room) return; room.players.delete(socket.id); if (room.players.size === 0) { rooms.delete(code); io.emit('roomClosed', { code }); } else { socket.to(code).emit('playerLeft', socket.id); io.to(code).emit('roomInfo', { code, count: room.players.size }); } }
+io.on('connection', socket => {
+  io.emit('onlineCount', io.engine.clientsCount);
+  socket.on('createRoom', (payload = {}) => { if (socket.data.roomCode) leaveSocketRoom(socket); if (rooms.size >= 500) return socket.emit('roomError', 'O servidor atingiu o limite de salas. Tente novamente mais tarde.'); const code = makeCode(); const room = { code, gameId: typeof payload.gameId === 'string' ? payload.gameId.slice(0, 80) : 'demo', players: new Map(), createdAt: Date.no
+
+--- socket.on('createRoom' | posição 14116 ---
+code); io.emit('roomClosed', { code }); } else { socket.to(code).emit('playerLeft', socket.id); io.to(code).emit('roomInfo', { code, count: room.players.size }); } }
+io.on('connection', socket => {
+  io.emit('onlineCount', io.engine.clientsCount);
+  socket.on('createRoom', (payload = {}) => { if (socket.data.roomCode) leaveSocketRoom(socket); if (rooms.size >= 500) return socket.emit('roomError', 'O servidor atingiu o limite de salas. Tente novamente mais tarde.'); const code = makeCode(); const room = { code, gameId: typeof payload.gameId === 'string' ? payload.gameId.slice(0, 80) : 'demo', players: new Map(), createdAt: Date.now() }; rooms.set(code, room); room.players.set(socket.id, roomPlayer(socket)); socket.join(code); socket.data.roomCode = code; socket.emit('roomJoined', { room: { code, gameId: room.gameId }, players: roomList(room) }); });
+  socket.on('joinRoom', (payload = {}) => { const code = String(payload.code || '').toUpperCase(); const room = rooms.get(code); if (!room) return socket.emit('roomError', 'Sala nÃ£o encontrada. Confira o cÃ³digo.'); if (room.players.size >= 12) return socket.emit('roomError', 'Essa sala 
+
+--- socket.on('joinRoom' | posição 14729 ---
+ap(), createdAt: Date.now() }; rooms.set(code, room); room.players.set(socket.id, roomPlayer(socket)); socket.join(code); socket.data.roomCode = code; socket.emit('roomJoined', { room: { code, gameId: room.gameId }, players: roomList(room) }); });
+  socket.on('joinRoom', (payload = {}) => { const code = String(payload.code || '').toUpperCase(); const room = rooms.get(code); if (!room) return socket.emit('roomError', 'Sala nÃ£o encontrada. Confira o cÃ³digo.'); if (room.players.size >= 12) return socket.emit('roomError', 'Essa sala estÃ¡ cheia (mÃ¡ximo de 12 jogadores).'); if (socket.data.roomCode) leaveSocketRoom(socket); room.players.set(socket.id, roomPlayer(socket)); socket.join(code); socket.data.roomCode = code; socket.emit('roomJoined', { room: { code, gameId: room.gameId }, players: roomList(room) }); socket.to(code).emit('playerJoined', room.players.get(socket.id)); io.to(code).emit('roomInfo', { code, count: room.players.size }); });
+  socket.on('move', (payload = {}) => { const code = socket.data.roomCode; const room = rooms.get(code); const player = room?.players.get(socket.id); if (!player) return; const x = Number(paylo
+
+--- socket.on('move' | posição 15438 ---
+.roomCode = code; socket.emit('roomJoined', { room: { code, gameId: room.gameId }, players: roomList(room) }); socket.to(code).emit('playerJoined', room.players.get(socket.id)); io.to(code).emit('roomInfo', { code, count: room.players.size }); });
+  socket.on('move', (payload = {}) => { const code = socket.data.roomCode; const room = rooms.get(code); const player = room?.players.get(socket.id); if (!player) return; const x = Number(payload.x); const y = Number(payload.y); if (!Number.isFinite(x) || !Number.isFinite(y)) return; player.x = Math.max(5, Math.min(95, x)); player.y = Math.max(12, Math.min(83, y)); socket.to(code).emit('playerMoved', player); });
+  socket.on('leaveRoom', () => leaveSocketRoom(socket)); socket.on('disconnect', () => { leaveSocketRoom(socket); io.emit('onlineCount', io.engine.clientsCount - 1); });
+});
+setInterval(() => { const now = Date.now(); for (const [token, session] of sessions) if (session.expires < now) sessions.delete(token); for (const [code, room] of rooms) if (now - room.createdAt > 6 * 60 * 60 * 1000 && room.players.size === 0) rooms.delete(code); }, 60_000).unref();
+server.listen(PORT, HOST, (
+
+--- socket.on('leaveRoom' | posição 15855 ---
+; const x = Number(payload.x); const y = Number(payload.y); if (!Number.isFinite(x) || !Number.isFinite(y)) return; player.x = Math.max(5, Math.min(95, x)); player.y = Math.max(12, Math.min(83, y)); socket.to(code).emit('playerMoved', player); });
+  socket.on('leaveRoom', () => leaveSocketRoom(socket)); socket.on('disconnect', () => { leaveSocketRoom(socket); io.emit('onlineCount', io.engine.clientsCount - 1); });
+});
+setInterval(() => { const now = Date.now(); for (const [token, session] of sessions) if (session.expires < now) sessions.delete(token); for (const [code, room] of rooms) if (now - room.createdAt > 6 * 60 * 60 * 1000 && room.players.size === 0) rooms.delete(code); }, 60_000).unref();
+server.listen(PORT, HOST, () => { console.log('=================================='); console.log('   BLOCKWORLD ONLINE'); console.log(`   Plataforma: http://localhost:${PORT}`); console.log('   Contas, publicaÃ§Ãµes e salas carregadas'); console.log('   Pressione Ctrl+C para encerrar'); console.log('=================================='); });
+
+
+
+--- socket.on('disconnect' | posição 15910 ---
+.y); if (!Number.isFinite(x) || !Number.isFinite(y)) return; player.x = Math.max(5, Math.min(95, x)); player.y = Math.max(12, Math.min(83, y)); socket.to(code).emit('playerMoved', player); });
+  socket.on('leaveRoom', () => leaveSocketRoom(socket)); socket.on('disconnect', () => { leaveSocketRoom(socket); io.emit('onlineCount', io.engine.clientsCount - 1); });
+});
+setInterval(() => { const now = Date.now(); for (const [token, session] of sessions) if (session.expires < now) sessions.delete(token); for (const [code, room] of rooms) if (now - room.createdAt > 6 * 60 * 60 * 1000 && room.players.size === 0) rooms.delete(code); }, 60_000).unref();
+server.listen(PORT, HOST, () => { console.log('=================================='); console.log('   BLOCKWORLD ONLINE'); console.log(`   Plataforma: http://localhost:${PORT}`); console.log('   Contas, publicaÃ§Ãµes e salas carregadas'); console.log('   Pressione Ctrl+C para encerrar'); console.log('=================================='); });
+
+
+
+Inspecao concluida. Nenhum arquivo foi alterado.

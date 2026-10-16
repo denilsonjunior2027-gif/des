@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "objects": [
+    {"type":"Plane","name":"Chão","position":[0,0,0],"rotation":[0,0,0],"scale":[20,1,20],"color":"#438a59"},
+    {"type":"Box","name":"Plataforma","position":[0,1,0],"rotation":[0,0,0],"scale":[3,2,3],"color":"#8175ff"},
+    {"type":"Sphere","name":"Esfera","position":[3,1,0],"rotation":[0,0,0],"scale":[2,2,2],"color":"#ffb454"},
+    {"type":"Cylinder","name":"Pilar","position":[-3,1,0],"rotation":[0,0,0],"scale":[1,2,1],"color":"#51c6df"}
+  ]
+}
